@@ -1,11 +1,9 @@
 import type { z } from 'zod'
 import type { ScheduleService } from '../services/schedule'
-import type { FileService } from '../services/files'
 
 /** Dependencies available to every tool handler. */
 export interface ToolContext {
   schedule: ScheduleService
-  files: FileService
 }
 
 export interface Tool<C = ToolContext> {

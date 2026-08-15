@@ -13,7 +13,7 @@ describe('ChatService trash lifecycle', () => {
       const svc = new ChatService(dir)
       await svc.load()
 
-      const id = svc.ensureConversation(undefined, '第一条消息')
+      const id = svc.createConversation({ personaId: 'default', firstMessage: '第一条消息' }).id
       svc.appendMessage({ id: 'm1', conversationId: id, role: 'user', content: 'hi', createdAt: 1 })
 
       expect(svc.listConversations()).toHaveLength(1)
@@ -41,7 +41,7 @@ describe('ChatService trash lifecycle', () => {
       expect(svc.getMessages(id)).toHaveLength(0)
 
       // auto-expiry: still kept after 10 days, purged after 31 days
-      const id2 = svc.ensureConversation(undefined, '第二条')
+      const id2 = svc.createConversation({ personaId: 'default', firstMessage: '第二条' }).id
       svc.trash(id2)
       expect(svc.listTrash()).toHaveLength(1)
 
@@ -69,7 +69,7 @@ describe('ChatService trash lifecycle', () => {
       })
       await svc.load()
 
-      const id = svc.ensureConversation(undefined, 'x')
+      const id = svc.createConversation({ personaId: 'default', firstMessage: 'x' }).id
       expect(count).toBe(1)
 
       svc.rename(id, 't')

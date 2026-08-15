@@ -7,7 +7,8 @@ import {
   Tray,
   Menu,
   nativeImage,
-  dialog
+  dialog,
+  screen
 } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -18,7 +19,6 @@ import type { SecretStore } from './config/config'
 import type { Settings } from '../shared/types'
 import { ChatService } from './services/chat'
 import { ScheduleService } from './services/schedule'
-import { FileService } from './services/files'
 import { ReminderService } from './services/reminders'
 import { ToolRegistry } from './agent/registry'
 import type { ToolContext } from './agent/registry'
@@ -26,7 +26,6 @@ import { AgentRunner } from './agent/loop'
 import { registerIpc } from './ipc/handlers'
 import { clockTool } from './tools/clock'
 import { scheduleTools } from './tools/schedule'
-import { filesTools } from './tools/files'
 
 app.setName('Personal Agent')
 
@@ -41,6 +40,7 @@ app.on('second-instance', () => {
 })
 
 let mainWindow: BrowserWindow | null = null
+let pomodoroWindow: BrowserWindow | null = null
 let reminders: ReminderService | null = null
 let tray: Tray | null = null
 let isQuitting = false
@@ -65,6 +65,72 @@ function showMainWindow(): void {
     mainWindow.focus()
   } else {
     createWindow()
+  }
+}
+
+function broadcastPomodoroOpen(open: boolean): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    w.webContents.send('pomodoro:openChanged', open)
+  }
+}
+
+function showPomodoroWindow(): void {
+  if (pomodoroWindow) {
+    if (pomodoroWindow.isMinimized()) pomodoroWindow.restore()
+    pomodoroWindow.show()
+    pomodoroWindow.focus()
+    broadcastPomodoroOpen(true)
+    return
+  }
+  createPomodoroWindow()
+}
+
+function isPomodoroOpen(): boolean {
+  return !!pomodoroWindow
+}
+
+function closePomodoroWindow(): void {
+  pomodoroWindow?.close()
+}
+
+function createPomodoroWindow(): void {
+  const width = 400
+  const height = 400
+  const { workArea } = screen.getPrimaryDisplay()
+  pomodoroWindow = new BrowserWindow({
+    width,
+    height,
+    x: workArea.x + workArea.width - width - 24,
+    y: workArea.y + workArea.height - height - 24,
+    title: '番茄钟',
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  })
+
+  // 阻止加载的 HTML 标题覆盖窗口标题，保持窗口名称为「番茄钟」。
+  pomodoroWindow.on('page-title-updated', (e) => e.preventDefault())
+  pomodoroWindow.on('ready-to-show', () => {
+    pomodoroWindow?.show()
+    broadcastPomodoroOpen(true)
+  })
+  pomodoroWindow.on('closed', () => {
+    pomodoroWindow = null
+    broadcastPomodoroOpen(false)
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    pomodoroWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?view=pomodoro`)
+  } else {
+    pomodoroWindow.loadFile(join(__dirname, '../renderer/index.html'), { query: { view: 'pomodoro' } })
   }
 }
 
@@ -180,6 +246,7 @@ app.whenReady().then(async () => {
   const config = new ConfigService(dataDir, secrets, () => {
     for (const w of BrowserWindow.getAllWindows()) {
       w.webContents.send('persona:changed')
+      w.webContents.send('pomodoro:changed')
     }
   })
   const chat = new ChatService(dataDir, () => {
@@ -192,25 +259,37 @@ app.whenReady().then(async () => {
       w.webContents.send('schedule:changed')
     }
   })
-  const files = new FileService(dataDir)
+  await Promise.all([config.load(), chat.load(), schedule.load()])
 
-  await Promise.all([config.load(), chat.load(), schedule.load(), files.load()])
-
-  // 回收站：启动时清理一次过期对话，之后每小时检查一次（30 天保留期）。
+  // 回收站：启动时清理一次过期对话与过期角色，之后每小时检查一次（30 天保留期）。
   chat.purgeExpired()
-  setInterval(() => chat.purgeExpired(), 60 * 60 * 1000)
+  config.purgeExpiredPersonas()
+  setInterval(() => {
+    chat.purgeExpired()
+    config.purgeExpiredPersonas()
+  }, 60 * 60 * 1000)
 
   applyRuntimeSettings(config.getSettings())
 
   const registry = new ToolRegistry<ToolContext>()
-  const ctx: ToolContext = { schedule, files }
+  const ctx: ToolContext = { schedule }
   registry.register(clockTool())
   for (const t of scheduleTools()) registry.register(t)
-  for (const t of filesTools()) registry.register(t)
 
   const runner = new AgentRunner(config, registry, ctx, chat)
 
-  registerIpc({ config, chat, schedule, files, runner, registry, getWindow: () => mainWindow, applyRuntimeSettings })
+  registerIpc({
+    config,
+    chat,
+    schedule,
+    runner,
+    registry,
+    getWindow: () => mainWindow,
+    applyRuntimeSettings,
+    showPomodoroWindow,
+    isPomodoroOpen,
+    closePomodoroWindow
+  })
 
   reminders = new ReminderService(schedule, (title, body) => {
     if (Notification.isSupported()) new Notification({ title, body }).show()
@@ -219,6 +298,7 @@ app.whenReady().then(async () => {
 
   createTray()
   createWindow()
+  showPomodoroWindow()
 
   if (app.isPackaged) {
     setupAutoUpdater()

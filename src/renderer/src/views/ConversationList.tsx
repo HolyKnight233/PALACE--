@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Conversation } from '../../../shared/types'
+import type { Conversation, Persona } from '../../../shared/types'
 
 interface Props {
   conversations: Conversation[]
   activeId: string | null
   onSelect: (id: string) => void
-  onNew: () => void
+  onStartConversation: (personaId: string) => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
 }
@@ -15,7 +15,7 @@ export default function ConversationList({
   conversations,
   activeId,
   onSelect,
-  onNew,
+  onStartConversation,
   onRename,
   onDelete
 }: Props): React.JSX.Element {
@@ -24,9 +24,35 @@ export default function ConversationList({
   const [renameText, setRenameText] = useState('')
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; id: string } | null>(null)
 
+  const [personas, setPersonas] = useState<Persona[]>([])
+
+  const [showNewConv, setShowNewConv] = useState(false)
+  const [newPersonaId, setNewPersonaId] = useState('')
+
+  const loadPersonas = async (): Promise<void> => {
+    const ps = await window.agentApi.getPersonas()
+    setPersonas(ps)
+  }
+
+  useEffect(() => {
+    void loadPersonas()
+    const off = window.agentApi.onPersonaChanged(() => void loadPersonas())
+    return off
+  }, [])
+
   const commitRename = (): void => {
     if (renamingId) onRename(renamingId, renameText.trim() || '新对话')
     setRenamingId(null)
+  }
+
+  const openNew = (): void => {
+    setNewPersonaId(personas[0]?.id ?? '')
+    setShowNewConv(true)
+  }
+
+  const confirmNew = (): void => {
+    onStartConversation(newPersonaId)
+    setShowNewConv(false)
   }
 
   return (
@@ -38,7 +64,7 @@ export default function ConversationList({
 
       {!collapsed && (
         <div className="conv-panel-body">
-          <button className="btn btn-primary conv-new" onClick={onNew}>
+          <button className="btn btn-primary conv-new" onClick={openNew}>
             新建对话
           </button>
           <div className="conv-list">
@@ -67,6 +93,7 @@ export default function ConversationList({
                   }}
                 >
                   <span className="conv-row-title">{c.title}</span>
+                  <span className="conv-row-role">{personas.find((p) => p.id === c.personaId)?.name ?? ''}</span>
                 </div>
               )
             )}
@@ -99,6 +126,39 @@ export default function ConversationList({
                 }}
               >
                 删除
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+
+      {showNewConv &&
+        createPortal(
+          <>
+            <div className="modal-overlay" onClick={() => setShowNewConv(false)} />
+            <div className="modal">
+              <div className="modal-header">
+                <span className="modal-title">开启新对话</span>
+                <button className="btn" onClick={() => setShowNewConv(false)}>
+                  关闭
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="field">
+                  <label>对话角色</label>
+                  <select className="select" value={newPersonaId} onChange={(e) => setNewPersonaId(e.target.value)}>
+                    {personas.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="row-actions">
+                  <button className="btn btn-primary" onClick={confirmNew}>
+                    开始对话
+                  </button>
+                </div>
               </div>
             </div>
           </>,

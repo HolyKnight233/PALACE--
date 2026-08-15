@@ -23,29 +23,54 @@ export class ChatService {
 
   async load(): Promise<void> {
     await this.store.load()
+    // 迁移：给旧对话补默认角色。
+    this.store.update((d) => {
+      for (const c of d.conversations) {
+        if (!c.personaId) c.personaId = 'default'
+      }
+    })
   }
 
   private emit(): void {
     this.onChange?.()
   }
 
-  ensureConversation(id?: string, firstMessage?: string): string {
-    if (id && this.store.read().conversations.some((c) => c.id === id && !c.deletedAt)) return id
-    const convId = newId()
+  getConversation(id: string): Conversation | undefined {
+    return this.store.read().conversations.find((c) => c.id === id)
+  }
+
+  /** 创建对话。 */
+  createConversation(opts: {
+    personaId: string
+    firstMessage?: string
+  }): Conversation {
     const now = Date.now()
-    const title = (firstMessage ?? '').trim().slice(0, 30) || '新对话'
+    const title = (opts.firstMessage ?? '').trim().slice(0, 30) || '新对话'
+    const conv: Conversation = {
+      id: newId(),
+      title,
+      personaId: opts.personaId,
+      createdAt: now,
+      updatedAt: now
+    }
     this.store.update((d) => {
-      d.conversations.unshift({ id: convId, title, createdAt: now, updatedAt: now })
+      d.conversations.unshift(conv)
     })
     this.emit()
-    return convId
+    return conv
   }
 
   appendMessage(msg: ChatMessage): void {
     this.store.update((d) => {
       d.messages.push(msg)
       const conv = d.conversations.find((c) => c.id === msg.conversationId)
-      if (conv) conv.updatedAt = Date.now()
+      if (conv) {
+        conv.updatedAt = Date.now()
+        // 首条用户消息自动作为标题
+        if (conv.title === '新对话' && msg.role === 'user' && msg.content.trim()) {
+          conv.title = msg.content.trim().slice(0, 30)
+        }
+      }
     })
   }
 
@@ -79,6 +104,17 @@ export class ChatService {
       if (c) c.title = title
     })
     this.emit()
+  }
+
+  /** 更新滚动摘要（持久化；不触发 UI 刷新，摘要不展示在前端）。 */
+  setSummary(id: string, summary: string, summarizedCount: number): void {
+    this.store.update((d) => {
+      const c = d.conversations.find((x) => x.id === id)
+      if (c) {
+        c.summary = summary
+        c.summarizedCount = summarizedCount
+      }
+    })
   }
 
   /** Move a conversation to the trash (soft delete). */

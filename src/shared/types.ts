@@ -23,10 +23,16 @@ export interface ChatMessage {
 export interface Conversation {
   id: string
   title: string
+  /** 该对话所属角色（persona）id。 */
+  personaId: string
   createdAt: number
   updatedAt: number
   /** Epoch ms when moved to trash; undefined while active. */
   deletedAt?: number
+  /** 滚动摘要：把被裁剪出窗口的更早历史压缩成的文本。 */
+  summary?: string
+  /** 已摘要到的消息条数（正序），用于增量摘要。 */
+  summarizedCount?: number
 }
 
 export interface Persona {
@@ -38,6 +44,14 @@ export interface Persona {
   systemPrompt: string
   defaultLanguage: string
   themeColor: string
+  /** 仅保留名字、隐藏人设细节。 */
+  hidden?: boolean
+  /** 补充提示词：AI 在对话中逐步补全的人设细节，避免长期聊天前后矛盾。 */
+  supplements?: string
+  /** 是否启用补充提示词（默认 true；启用后会自动补全写入）。 */
+  supplementsEnabled?: boolean
+  /** Epoch ms when moved to trash; undefined while active. */
+  deletedAt?: number
 }
 
 export type ProviderId = 'deepseek' | 'custom'
@@ -50,10 +64,12 @@ export interface Settings {
   temperature: number
   timezone: string
   hasApiKey: boolean
-  /** Launch the app automatically when Windows starts. */
   launchAtLogin: boolean
-  /** Hide to the system tray instead of quitting when the window is closed. */
   closeToTray: boolean
+  /** 番茄钟是否显示格言（默认 true）。 */
+  pomodoroShowMotto: boolean
+  /** 格言是否由当前选中角色表达（默认 true；仅当 pomodoroShowMotto 开启时生效）。 */
+  pomodoroMottoByPersona: boolean
 }
 
 export interface SettingsUpdate {
@@ -64,6 +80,8 @@ export interface SettingsUpdate {
   timezone: string
   launchAtLogin: boolean
   closeToTray: boolean
+  pomodoroShowMotto: boolean
+  pomodoroMottoByPersona: boolean
   /** Optional; only supplied when the user types a new key. */
   apiKey?: string
 }
@@ -84,40 +102,13 @@ export interface CalendarEvent {
   updatedAt: number
 }
 
-export type OrganizeMode = 'by-extension' | 'by-date' | 'by-name-pattern'
-
-export interface OrganizeRule {
-  sourceFolder: string
-  mode: OrganizeMode
-  /** Regex for by-name-pattern mode. */
-  regexPattern?: string
-  /** Optional base folder for grouped subfolders. Defaults to sourceFolder. */
-  targetBase?: string
-}
-
-export interface FileMovePreview {
-  source: string
-  destination: string
-  size: number
-  conflict: boolean
-}
-
-export interface FileMoveRecord {
+export interface PomodoroPreset {
   id: string
-  batchId: string
-  source: string
-  destination: string
-  fileName: string
-  size: number
-  status: 'moved' | 'failed'
-  error?: string
-  createdAt: number
-}
-
-export interface FileEntry {
   name: string
-  isDirectory: boolean
-  size: number
+  workMinutes: number
+  breakMinutes: number
+  /** 循环次数；0 表示无限循环。 */
+  loopCount: number
 }
 
 export interface ChatStreamEvent {
@@ -139,17 +130,6 @@ export interface EventRange {
   to?: number
 }
 
-export interface FileExecuteResult {
-  batchId: string
-  moved: number
-  failed: FileMoveRecord[]
-}
-
-export interface FileUndoResult {
-  batchId: string | null
-  restored: number
-}
-
 export interface WindowControls {
   minimize(): Promise<void>
   toggleMaximize(): Promise<boolean>
@@ -160,14 +140,19 @@ export interface WindowControls {
 
 /** The surface exposed on window.agentApi via contextBridge. */
 export interface AgentApi {
-  getPersona(): Promise<Persona>
   getDefaultPersona(): Promise<Persona>
   savePersona(persona: Persona): Promise<Persona>
   getPersonas(): Promise<Persona[]>
-  setActivePersona(id: string): Promise<Persona>
   createPersona(): Promise<Persona>
   deletePersona(id: string): Promise<Persona>
+  /** 回收站里的角色。 */
+  listTrashPersonas(): Promise<Persona[]>
+  restorePersona(id: string): Promise<Persona>
+  purgePersona(id: string): Promise<Persona>
+  /** 用接入的模型生成一个角色人设（不含 id）。 */
+  generatePersona(requirement: string): Promise<Omit<Persona, 'id'>>
   onPersonaChanged(callback: () => void): () => void
+
   getSettings(): Promise<Settings>
   getDefaultSettings(): Promise<Settings>
   saveSettings(update: SettingsUpdate): Promise<Settings>
@@ -175,6 +160,7 @@ export interface AgentApi {
 
   chatSend(payload: { conversationId?: string; message: string }): Promise<{ conversationId: string }>
   chatStop(conversationId: string): Promise<void>
+  chatNewConversation(opts: { personaId: string }): Promise<Conversation>
   listConversations(): Promise<Conversation[]>
   getMessages(conversationId: string): Promise<ChatMessage[]>
   renameConversation(conversationId: string, title: string): Promise<void>
@@ -210,13 +196,34 @@ export interface AgentApi {
     }>
   ): Promise<CalendarEvent>
   deleteEvent(id: string): Promise<void>
-  /** Subscribe to schedule mutations (fired whenever a schedule is created/updated/deleted). */
+  /** Subscribe to schedule mutations. */
   onScheduleChanged(callback: () => void): () => void
 
-  filesPreview(rule: OrganizeRule): Promise<FileMovePreview[]>
-  filesExecute(rule: OrganizeRule): Promise<FileExecuteResult>
-  filesUndoLast(): Promise<FileUndoResult>
-  filesList(folder: string): Promise<FileEntry[]>
-  chooseFolder(): Promise<string | null>
+  getPomodoros(): Promise<PomodoroPreset[]>
+  getActivePomodoro(): Promise<PomodoroPreset>
+  savePomodoro(preset: PomodoroPreset): Promise<PomodoroPreset>
+  setActivePomodoro(id: string): Promise<PomodoroPreset>
+  createPomodoro(): Promise<PomodoroPreset>
+  deletePomodoro(id: string): Promise<PomodoroPreset>
+  onPomodoroChanged(callback: () => void): () => void
+  /** 番茄钟独立窗口的控制（打开/最小化/关闭）。 */
+  pomodoroWindow: {
+    open(): Promise<void>
+    minimize(): Promise<void>
+    close(): Promise<void>
+  }
+  /** 打开/关闭番茄钟窗口。 */
+  setPomodoroOpen(open: boolean): Promise<void>
+  isPomodoroOpen(): Promise<boolean>
+  onPomodoroOpenChanged(callback: (open: boolean) => void): () => void
+  /** 主窗口把当前主题色与当前对话角色同步给主进程（供番茄钟窗口使用）。 */
+  setTheme(color: string, personaId: string | null): Promise<void>
+  onThemeChanged(callback: (payload: { color: string; personaId: string | null }) => void): () => void
+  /** 以当前对话角色生成一句番茄钟格言（含角色名）。 */
+  generateMotto(): Promise<{ personaName: string; motto: string }>
+  /** 番茄钟窗口打开时获取当前主题色与当前对话角色。 */
+  getPomodoroContext(): Promise<{ color: string; personaId: string | null }>
+
+  notify(title: string, body: string): Promise<void>
   windowControls: WindowControls
 }

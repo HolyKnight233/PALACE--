@@ -33,4 +33,27 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('clock_now')
     expect(p).toContain('schedule_create')
   })
+
+  it('includes human-like reply style rules', () => {
+    const p = buildSystemPrompt(persona, [])
+    expect(p).toContain('像真人聊天')
+    expect(p).toContain('不要使用 Markdown')
+    expect(p).toContain('emoji')
+  })
+
+  it('injects rolling summary when provided', () => {
+    const p = buildSystemPrompt(persona, [], { summary: '此前讨论过旅行计划' })
+    expect(p).toContain('更早对话的摘要')
+    expect(p).toContain('此前讨论过旅行计划')
+  })
+
+  it('injects persona supplements when enabled', () => {
+    const p = buildSystemPrompt({ ...persona, supplements: '角色补充内容', supplementsEnabled: true }, [])
+    expect(p).toContain('角色补充内容')
+  })
+
+  it('omits persona supplements when disabled', () => {
+    const p = buildSystemPrompt({ ...persona, supplements: '角色补充内容', supplementsEnabled: false }, [])
+    expect(p).not.toContain('角色补充内容')
+  })
 })

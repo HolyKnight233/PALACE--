@@ -2,13 +2,15 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { AgentApi, ChatStreamEvent } from '../shared/types'
 
 const api: AgentApi = {
-  getPersona: () => ipcRenderer.invoke('persona:get'),
   getDefaultPersona: () => ipcRenderer.invoke('persona:getDefault'),
   savePersona: (persona) => ipcRenderer.invoke('persona:save', persona),
   getPersonas: () => ipcRenderer.invoke('persona:list'),
-  setActivePersona: (id) => ipcRenderer.invoke('persona:setActive', id),
   createPersona: () => ipcRenderer.invoke('persona:create'),
   deletePersona: (id) => ipcRenderer.invoke('persona:delete', id),
+  listTrashPersonas: () => ipcRenderer.invoke('persona:listTrash'),
+  restorePersona: (id) => ipcRenderer.invoke('persona:restore', id),
+  purgePersona: (id) => ipcRenderer.invoke('persona:purge', id),
+  generatePersona: (requirement) => ipcRenderer.invoke('persona:generate', requirement),
   onPersonaChanged: (callback) => {
     const listener = (): void => callback()
     ipcRenderer.on('persona:changed', listener)
@@ -16,6 +18,7 @@ const api: AgentApi = {
       ipcRenderer.removeListener('persona:changed', listener)
     }
   },
+
   getSettings: () => ipcRenderer.invoke('settings:get'),
   getDefaultSettings: () => ipcRenderer.invoke('settings:getDefault'),
   saveSettings: (update) => ipcRenderer.invoke('settings:save', update),
@@ -23,6 +26,7 @@ const api: AgentApi = {
 
   chatSend: (payload) => ipcRenderer.invoke('chat:send', payload),
   chatStop: (conversationId) => ipcRenderer.invoke('chat:stop', conversationId),
+  chatNewConversation: (opts) => ipcRenderer.invoke('chat:newConversation', opts),
   listConversations: () => ipcRenderer.invoke('chat:listConversations'),
   getMessages: (conversationId) => ipcRenderer.invoke('chat:getMessages', conversationId),
   renameConversation: (conversationId, title) => ipcRenderer.invoke('chat:rename', conversationId, title),
@@ -57,11 +61,50 @@ const api: AgentApi = {
     }
   },
 
-  filesPreview: (rule) => ipcRenderer.invoke('files:preview', rule),
-  filesExecute: (rule) => ipcRenderer.invoke('files:execute', rule),
-  filesUndoLast: () => ipcRenderer.invoke('files:undoLast'),
-  filesList: (folder) => ipcRenderer.invoke('files:list', folder),
-  chooseFolder: () => ipcRenderer.invoke('files:chooseFolder'),
+  getPomodoros: () => ipcRenderer.invoke('pomodoro:list'),
+  getActivePomodoro: () => ipcRenderer.invoke('pomodoro:getActive'),
+  savePomodoro: (preset) => ipcRenderer.invoke('pomodoro:save', preset),
+  setActivePomodoro: (id) => ipcRenderer.invoke('pomodoro:setActive', id),
+  createPomodoro: () => ipcRenderer.invoke('pomodoro:create'),
+  deletePomodoro: (id) => ipcRenderer.invoke('pomodoro:delete', id),
+  onPomodoroChanged: (callback) => {
+    const listener = (): void => callback()
+    ipcRenderer.on('pomodoro:changed', listener)
+    return () => {
+      ipcRenderer.removeListener('pomodoro:changed', listener)
+    }
+  },
+
+  pomodoroWindow: {
+    open: () => ipcRenderer.invoke('pomodoro:open'),
+    minimize: () => ipcRenderer.invoke('pomodoro:minimize'),
+    close: () => ipcRenderer.invoke('pomodoro:close')
+  },
+  setPomodoroOpen: (open) => ipcRenderer.invoke('pomodoro:setOpen', open),
+  isPomodoroOpen: () => ipcRenderer.invoke('pomodoro:isOpen'),
+  onPomodoroOpenChanged: (callback) => {
+    const listener = (_e: Electron.IpcRendererEvent, open: boolean): void => callback(open)
+    ipcRenderer.on('pomodoro:openChanged', listener)
+    return () => {
+      ipcRenderer.removeListener('pomodoro:openChanged', listener)
+    }
+  },
+
+  setTheme: (color, personaId) => ipcRenderer.invoke('theme:set', color, personaId),
+  onThemeChanged: (callback) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      payload: { color: string; personaId: string | null }
+    ): void => callback(payload)
+    ipcRenderer.on('theme:changed', listener)
+    return () => {
+      ipcRenderer.removeListener('theme:changed', listener)
+    }
+  },
+  generateMotto: () => ipcRenderer.invoke('pomodoro:motto'),
+  getPomodoroContext: () => ipcRenderer.invoke('pomodoro:getContext'),
+
+  notify: (title, body) => ipcRenderer.invoke('notify', title, body),
 
   windowControls: {
     minimize: () => ipcRenderer.invoke('win:minimize'),

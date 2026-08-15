@@ -176,3 +176,32 @@ export async function pingLLM(opts: {
     return { ok: false, message: (err as Error)?.message ?? String(err) }
   }
 }
+
+/** 非流式补全，返回模型输出的文本。 */
+export async function completeChat(opts: {
+  baseURL: string
+  apiKey: string
+  model: string
+  temperature: number
+  messages: ApiMessage[]
+}): Promise<string> {
+  const resp = await fetch(buildUrl(opts.baseURL), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${opts.apiKey}`
+    },
+    body: JSON.stringify({
+      model: opts.model,
+      messages: opts.messages,
+      temperature: opts.temperature,
+      stream: false
+    })
+  })
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '')
+    throw new Error(`LLM API ${resp.status}: ${text.slice(0, 300)}`)
+  }
+  const json = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> }
+  return json.choices?.[0]?.message?.content ?? ''
+}

@@ -11,7 +11,7 @@ const secrets: SecretStore = {
 }
 
 describe('ConfigService personas', () => {
-  it('creates, switches, renames, and deletes presets', async () => {
+  it('creates, edits, and deletes personas', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'agent-persona-'))
     try {
       const svc = new ConfigService(dir, secrets)
@@ -22,9 +22,6 @@ describe('ConfigService personas', () => {
 
       const created = svc.createPersona()
       expect(svc.getPersonas()).toHaveLength(2)
-      expect(svc.getPersona().id).toBe(created.id)
-
-      svc.setActivePersona('default')
       expect(svc.getPersona().id).toBe('default')
 
       svc.setPersona({ ...created, name: '工作助手' })
@@ -34,7 +31,7 @@ describe('ConfigService personas', () => {
       expect(svc.getPersonas()).toHaveLength(1)
       expect(svc.getPersona().id).toBe('default')
 
-      // 最后一个预设不可删除
+      // 最后一个角色不可删除
       svc.deletePersona('default')
       expect(svc.getPersonas()).toHaveLength(1)
     } finally {

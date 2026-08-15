@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toApiMessages } from '../../src/main/agent/messages'
+import { selectHistory, toApiMessages } from '../../src/main/agent/messages'
 import type { ChatMessage } from '../../src/shared/types'
 
 function make(partial: Omit<ChatMessage, 'conversationId' | 'createdAt'>): ChatMessage {
@@ -35,13 +35,30 @@ describe('toApiMessages', () => {
     expect(out).toHaveLength(2)
     expect(out[1].role).toBe('user')
   })
+})
 
-  it('truncates long history to the most recent messages', () => {
+describe('selectHistory (token budget + recent floor)', () => {
+  it('keeps all short messages within the token budget', () => {
     const history: ChatMessage[] = Array.from({ length: 50 }, (_, i) =>
       make({ id: `${i}`, role: 'user', content: `m${i}` })
     )
-    const out = toApiMessages(history, 'SYS')
-    expect(out).toHaveLength(31)
-    expect(out[1].content).toBe('m20')
+    const { selected, dropped } = selectHistory(history)
+    expect(selected).toHaveLength(50)
+    expect(dropped).toHaveLength(0)
+  })
+
+  it('always keeps at least the most recent MIN_RECENT_MESSAGES when over budget', () => {
+    // 每条超长中文消息 ≈ 2000 token，20 条远超 12K 预算。
+    const long = '长'.repeat(2000)
+    const history: ChatMessage[] = Array.from({ length: 20 }, (_, i) =>
+      make({ id: `${i}`, role: 'user', content: long })
+    )
+    const { selected, dropped } = selectHistory(history)
+    expect(selected.length).toBeGreaterThanOrEqual(12)
+    expect(selected.length).toBeLessThan(20)
+    expect(dropped.length).toBe(20 - selected.length)
+    expect(dropped.length).toBeGreaterThan(0)
+    // 最新一条永远保留在末尾。
+    expect(selected[selected.length - 1].id).toBe('19')
   })
 })

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 
 interface DisplayMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  createdAt: number
   toolName?: string
   error?: boolean
 }
@@ -12,9 +13,32 @@ interface Props {
   activeId: string | null
   title: string
   onCreated: (id: string) => void
+  /** 该对话绑定的角色已被删除（在回收站中），对话失效。 */
+  personaMissing?: boolean
 }
 
-export default function ChatView({ activeId, title, onCreated }: Props): React.JSX.Element {
+const TIME_GAP_MS = 5 * 60 * 1000
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function startOfDay(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+}
+
+function formatDividerTime(ts: number): string {
+  const d = new Date(ts)
+  const now = new Date()
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const dayDiff = Math.round((startOfDay(now) - startOfDay(d)) / 86400000)
+  if (dayDiff <= 0) return hm
+  if (dayDiff === 1) return `昨天 ${hm}`
+  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${hm}`
+}
+
+export default function ChatView({ activeId, title, onCreated, personaMissing = false }: Props): React.JSX.Element {
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -23,6 +47,7 @@ export default function ChatView({ activeId, title, onCreated }: Props): React.J
 
   const activeIdRef = useRef<string | null>(activeId)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const isSwitchingRef = useRef(false)
 
   const loadMessages = useCallback(async (id: string): Promise<void> => {
     const msgs = await window.agentApi.getMessages(id)
@@ -32,6 +57,7 @@ export default function ChatView({ activeId, title, onCreated }: Props): React.J
         id: m.id,
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content,
+        createdAt: m.createdAt,
         toolName:
           m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0
             ? m.toolCalls.map((t) => t.name).join('、')
@@ -45,6 +71,7 @@ export default function ChatView({ activeId, title, onCreated }: Props): React.J
   useEffect(() => {
     if (activeId === activeIdRef.current) return
     activeIdRef.current = activeId
+    isSwitchingRef.current = true
     setStreaming(false)
     setStreamingText('')
     setToolStatus(null)
@@ -76,7 +103,7 @@ export default function ChatView({ activeId, title, onCreated }: Props): React.J
         setToolStatus(null)
         setMessages((prev) => [
           ...prev,
-          { id: `err-${Date.now()}`, role: 'assistant', content: `出错了：${ev.error ?? '未知错误'}`, error: true }
+          { id: `err-${Date.now()}`, role: 'assistant', content: `出错了：${ev.error ?? '未知错误'}`, error: true, createdAt: Date.now() }
         ])
       }
     })
@@ -84,16 +111,19 @@ export default function ChatView({ activeId, title, onCreated }: Props): React.J
   }, [loadMessages])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // 切换/加载对话时直接跳到底部（instant）；流式输出时才平滑跟随。
+    const behavior: ScrollBehavior = isSwitchingRef.current ? 'auto' : 'smooth'
+    isSwitchingRef.current = false
+    bottomRef.current?.scrollIntoView({ behavior })
   }, [messages, streamingText, toolStatus])
 
   const handleSend = async (): Promise<void> => {
     const text = input.trim()
-    if (!text || streaming) return
+    if (!text || streaming || personaMissing) return
     setInput('')
     setStreamingText('')
     setToolStatus(null)
-    setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: 'user', content: text }])
+    setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: 'user', content: text, createdAt: Date.now() }])
     setStreaming(true)
 
     try {
@@ -107,7 +137,7 @@ export default function ChatView({ activeId, title, onCreated }: Props): React.J
       setStreaming(false)
       setMessages((prev) => [
         ...prev,
-        { id: `err-${Date.now()}`, role: 'assistant', content: `出错了：${String(err)}`, error: true }
+        { id: `err-${Date.now()}`, role: 'assistant', content: `出错了：${String(err)}`, error: true, createdAt: Date.now() }
       ])
     }
   }
@@ -124,12 +154,25 @@ export default function ChatView({ activeId, title, onCreated }: Props): React.J
         </div>
 
         <div className="messages">
-          {messages.map((m) => (
-            <div key={m.id} className={`msg ${m.role}`}>
-              <div className={`bubble${m.error ? ' error-bubble' : ''}`}>{m.content}</div>
-              {m.toolName && <div className="tool-note">已调用工具：{m.toolName}</div>}
+          {personaMissing && (
+            <div className="persona-missing">
+              <div className="persona-missing-title">该对话的角色已被删除</div>
+              <div className="persona-missing-sub">对话已失效，无法继续发送消息。请到「设置 → 回收站」恢复该角色。</div>
             </div>
-          ))}
+          )}
+          {messages.map((m, i) => {
+            const prev = messages[i - 1]
+            const showDivider = !prev || m.createdAt - prev.createdAt > TIME_GAP_MS
+            return (
+              <Fragment key={m.id}>
+                {showDivider && <div className="time-divider">{formatDividerTime(m.createdAt)}</div>}
+                <div className={`msg ${m.role}`}>
+                  {m.content ? <div className={`bubble${m.error ? ' error-bubble' : ''}`}>{m.content}</div> : null}
+                  {m.toolName && <div className="tool-note">已调用工具：{m.toolName}</div>}
+                </div>
+              </Fragment>
+            )
+          })}
 
           {(streamingText || streaming) && (
             <div className="msg assistant">
@@ -148,8 +191,9 @@ export default function ChatView({ activeId, title, onCreated }: Props): React.J
         <div className="chat-inputbar">
           <input
             className="input"
-            placeholder="输入消息，例如：明天下午三点提醒我开会"
+            placeholder={personaMissing ? '该对话已失效' : '输入消息，例如：明天下午三点提醒我开会'}
             value={input}
+            disabled={personaMissing}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.nativeEvent.isComposing) void handleSend()
@@ -160,7 +204,7 @@ export default function ChatView({ activeId, title, onCreated }: Props): React.J
               停止
             </button>
           ) : (
-            <button className="btn btn-primary" disabled={!input.trim()} onClick={() => void handleSend()}>
+            <button className="btn btn-primary" disabled={personaMissing || !input.trim()} onClick={() => void handleSend()}>
               发送
             </button>
           )}

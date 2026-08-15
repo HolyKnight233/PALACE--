@@ -2,11 +2,11 @@ import { newId } from '../db/store'
 import type { ConfigService } from '../config/config'
 import type { ChatService } from '../services/chat'
 import type { ToolCall } from '../llm/openaiCompat'
-import { streamChatCompletion } from '../llm/openaiCompat'
-import type { ToolCallPart } from '../../shared/types'
+import { completeChat, streamChatCompletion } from '../llm/openaiCompat'
+import type { ChatMessage, Conversation, ToolCallPart } from '../../shared/types'
 import { buildSystemPrompt } from './systemPrompt'
 import type { ToolContext, ToolRegistry } from './registry'
-import { toApiMessages } from './messages'
+import { messagesToApi, selectHistory } from './messages'
 
 export interface ChatSink {
   onDelta(text: string): void
@@ -25,7 +25,8 @@ export class AgentRunner {
   ) {}
 
   async run(userMessage: string, conversationId: string, signal: AbortSignal, sink: ChatSink): Promise<void> {
-    const persona = this.config.getPersona()
+    const conversation = this.chat.getConversation(conversationId)
+    const persona = this.config.getPersonaById(conversation?.personaId ?? this.config.getPersona().id)
     const llm = this.config.getLLMConfig()
     if (!llm.apiKey) {
       throw new Error('尚未配置 API Key，请先到「设置」页填写并保存。')
@@ -39,9 +40,14 @@ export class AgentRunner {
       createdAt: Date.now()
     })
 
-    const system = buildSystemPrompt(persona, this.registry.names())
+    // 按 token 预算选取上下文，并把被裁剪的更早历史增量压缩进滚动摘要。
+    const all = this.chat.getMessages(conversationId)
+    const selection = selectHistory(all)
+    const summary = await this.updateSummary(conversationId, selection.dropped, conversation, llm)
+
+    const system = buildSystemPrompt(persona, this.registry.names(), { summary })
     const tools = this.registry.toOpenAI()
-    const apiMessages = toApiMessages(this.chat.getMessages(conversationId), system)
+    const apiMessages = messagesToApi(selection.selected, system)
 
     let iteration = 0
     while (iteration < MAX_ITERATIONS) {
@@ -147,6 +153,56 @@ export class AgentRunner {
       return msg
     }
   }
+
+  /**
+   * 把「新增被裁剪的消息」增量压缩进对话的滚动摘要。
+   * 仅在确实有新的更早历史被挤出窗口时才调用模型；失败则静默保留旧摘要。
+   */
+  private async updateSummary(
+    conversationId: string,
+    dropped: ChatMessage[],
+    conversation: Conversation | undefined,
+    llm: { baseURL: string; apiKey: string | null; model: string; temperature: number }
+  ): Promise<string> {
+    const existing = conversation?.summary?.trim() ?? ''
+    const summarizedCount = conversation?.summarizedCount ?? 0
+    const fresh = dropped.slice(summarizedCount)
+    if (fresh.length === 0 || !llm.apiKey) return existing
+
+    try {
+      const historyText = fresh.map(formatMessageForSummary).join('\n')
+      const prompt = [
+        '请把下面的对话历史压缩成一份简洁的摘要。',
+        '只保留：关键事实、用户的偏好与约束、已做出的决定、未完成的事项。',
+        '省略寒暄和重复，用中文、不超过 400 字。',
+        existing ? `已有摘要：\n${existing}` : '',
+        `新增历史：\n${historyText}`
+      ]
+        .filter(Boolean)
+        .join('\n')
+
+      const raw = await completeChat({
+        baseURL: llm.baseURL,
+        apiKey: llm.apiKey,
+        model: llm.model,
+        temperature: 0.3,
+        messages: [{ role: 'user', content: prompt }]
+      })
+      const next = raw.trim()
+      if (next) {
+        this.chat.setSummary(conversationId, next, dropped.length)
+        return next
+      }
+    } catch (err) {
+      console.error('[summary]', err)
+    }
+    return existing
+  }
+}
+
+function formatMessageForSummary(m: ChatMessage): string {
+  const label = m.role === 'user' ? '用户' : m.role === 'assistant' ? '助手' : '工具结果'
+  return `[${label}] ${m.content ?? ''}`
 }
 
 function safeParseArgs(raw: string): Record<string, unknown> {

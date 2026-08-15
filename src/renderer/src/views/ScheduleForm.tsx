@@ -12,14 +12,16 @@ function toLocalInput(epoch: number): string {
 
 interface Props {
   event?: CalendarEvent
+  /** 新增模式下默认的开始时间。 */
+  initialStartAt?: number
   onBack: () => void
   onSaved: () => void
   onDeleted?: () => void
 }
 
-export default function ScheduleForm({ event, onBack, onSaved, onDeleted }: Props): React.JSX.Element {
+export default function ScheduleForm({ event, initialStartAt, onBack, onSaved, onDeleted }: Props): React.JSX.Element {
   const [title, setTitle] = useState('')
-  const [startStr, setStartStr] = useState(toLocalInput(Date.now() + 3600000))
+  const [startStr, setStartStr] = useState(toLocalInput(initialStartAt ?? Date.now() + 3600000))
   const [duration, setDuration] = useState('60')
   const [reminder, setReminder] = useState('10')
   const [location, setLocation] = useState('')
