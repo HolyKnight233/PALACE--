@@ -216,6 +216,8 @@ export interface AgentApi {
   setPomodoroOpen(open: boolean): Promise<void>
   isPomodoroOpen(): Promise<boolean>
   onPomodoroOpenChanged(callback: (open: boolean) => void): () => void
+  /** 调整番茄钟窗口高度（不显示格言时底部向上缩小）。 */
+  setPomodoroCompact(compact: boolean): Promise<void>
   /** 主窗口把当前主题色与当前对话角色同步给主进程（供番茄钟窗口使用）。 */
   setTheme(color: string, personaId: string | null): Promise<void>
   onThemeChanged(callback: (payload: { color: string; personaId: string | null }) => void): () => void

@@ -56,8 +56,10 @@ export default function PomodoroWindow(): React.JSX.Element {
     setActiveId(act.id)
     reset(act)
     const s = await window.agentApi.getSettings()
-    setShowMotto(s.pomodoroShowMotto ?? true)
-    showMottoRef.current = s.pomodoroShowMotto ?? true
+    const show = s.pomodoroShowMotto ?? true
+    setShowMotto(show)
+    showMottoRef.current = show
+    void window.agentApi.setPomodoroCompact(!show)
     const ctx = await window.agentApi.getPomodoroContext()
     document.documentElement.style.setProperty('--accent', ctx.color)
     lastPersonaIdRef.current = ctx.personaId
@@ -234,23 +236,25 @@ export default function PomodoroWindow(): React.JSX.Element {
           </button>
         </div>
 
-        <div className="pomodoro-motto">
-          <span className="pomodoro-motto-text">
-            {showMotto && hasPersona && motto.motto
-              ? motto.personaName
-                ? `${motto.personaName}：${motto.motto}`
-                : motto.motto
-              : ''}
-          </span>
-          {showMotto && hasPersona && (
-            <button className="pomodoro-motto-refresh" onClick={() => void refreshMotto()} title="换一句">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12a9 9 0 1 1-2.6-6.3" />
-                <path d="M21 3v5h-5" />
-              </svg>
-            </button>
-          )}
-        </div>
+        {showMotto && (
+          <div className="pomodoro-motto">
+            <span className="pomodoro-motto-text">
+              {hasPersona && motto.motto
+                ? motto.personaName
+                  ? `${motto.personaName}：${motto.motto}`
+                  : motto.motto
+                : ''}
+            </span>
+            {hasPersona && (
+              <button className="pomodoro-motto-refresh" onClick={() => void refreshMotto()} title="换一句">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-2.6-6.3" />
+                  <path d="M21 3v5h-5" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
 
         {showEdit && (
           <div className="form pomodoro-edit">

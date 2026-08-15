@@ -82,6 +82,7 @@ const api: AgentApi = {
   },
   setPomodoroOpen: (open) => ipcRenderer.invoke('pomodoro:setOpen', open),
   isPomodoroOpen: () => ipcRenderer.invoke('pomodoro:isOpen'),
+  setPomodoroCompact: (compact) => ipcRenderer.invoke('pomodoro:setCompact', compact),
   onPomodoroOpenChanged: (callback) => {
     const listener = (_e: Electron.IpcRendererEvent, open: boolean): void => callback(open)
     ipcRenderer.on('pomodoro:openChanged', listener)

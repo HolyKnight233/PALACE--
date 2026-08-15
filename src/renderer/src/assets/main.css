@@ -1344,12 +1344,10 @@ button {
 .pomodoro-body {
   flex: 1;
   overflow-y: auto;
-  scrollbar-gutter: stable;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 12px;
 }
 
 .pomodoro-presets {
@@ -1414,16 +1412,14 @@ button {
 }
 
 .pomodoro-motto {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 0 2px;
+  position: relative;
   height: 39px;
   flex: none;
+  margin-top: auto;
 }
 
 .pomodoro-motto-text {
-  flex: 1;
+  width: 100%;
   font-size: 13px;
   color: var(--text-2);
   line-height: 1.5;
@@ -1434,18 +1430,20 @@ button {
 }
 
 .pomodoro-motto-refresh {
+  position: absolute;
+  top: -22px;
+  right: 0;
   border: none;
   background: transparent;
   color: var(--text-2);
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  opacity: 0.55;
-  flex: none;
+  opacity: 0.45;
 }
 
 .pomodoro-motto-refresh:hover {

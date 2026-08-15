@@ -124,7 +124,7 @@ export function registerIpc(deps: Deps): void {
       '提炼要求（必须遵守）：',
       '- 输出的是「关于该角色的客观人设要点」，用普通话、直白、概括性的短句描述，绝不照抄任何一方的原话。',
       '- 例：助手说「我这人只记遗言，不记别的」，应概括为「角色只负责记录遗言」，而不是照抄原句。',
-      '- 每条一句话、用分号分隔、每条都能独立看懂，总长不超过 150 字。',
+      '- 每条一句话、用分号分隔、每条都能独立看懂',
       '- 只保留对后续对话有用、能避免人设前后矛盾的稳定特征；忽略寒暄、闲聊、一次性内容。',
       '- 若已有内容晦涩混乱，请把它重新整理成清晰条目。',
       '',
@@ -320,6 +320,14 @@ export function registerIpc(deps: Deps): void {
     else closePomodoroWindow()
   })
   ipcMain.handle('pomodoro:isOpen', () => isPomodoroOpen())
+  ipcMain.handle('pomodoro:setCompact', (e, compact: boolean) => {
+    const w = BrowserWindow.fromWebContents(e.sender)
+    if (w) {
+      const [x, y] = w.getPosition()
+      const [width] = w.getSize()
+      w.setBounds({ x, y, width, height: compact ? 350 : 400 })
+    }
+  })
 
   // ---- theme sync & pomodoro motto ----
   ipcMain.handle('theme:set', (_e, color: string, personaId: string | null) => {
@@ -337,12 +345,12 @@ export function registerIpc(deps: Deps): void {
     const byPersona = settings.pomodoroMottoByPersona !== false
     if (!llm.apiKey) return { personaName: byPersona ? persona.name : '', motto: '专注当下，一步一步来。' }
     const intro = byPersona
-      ? `请以「${persona.name}」的口吻，对正在专注工作的用户说一句陪伴的话。角色定位：${persona.role || '无'}。说话风格：${persona.speakingStyle || '自然'}。`
-      : '请对正在专注工作的用户说一句陪伴的话。'
+      ? `请以「${persona.name}」的口吻，写一句适合番茄钟专注场景的格言或鼓励语。角色定位：${persona.role || '无'}。说话风格：${persona.speakingStyle || '自然'}。`
+      : '请写一句适合番茄钟专注场景的格言或鼓励语。'
     const prompt = [
       intro,
       '内容类型随机选择：一半概率是人生哲理，一半概率是鼓励。',
-      '要求：只输出一句话，简短有力；使用正常的中文标点（逗号、句号等），但不要加引号或任何解释；不要使用 Markdown；不要每次都写“专注当下”之类的雷同句子。'
+      '要求：这是一句格言或鼓励语，内容该是什么样就是什么样，不要总是以“你”开头、不要总是用“你要……”“你应该……”这类说教口吻（格言和鼓励常是陈述句、感悟、哲理）；语气由上面的角色决定即可。只输出一句话，简短有力；使用正常的中文标点；不要加引号或任何解释；不要使用 Markdown；不要每次都写“专注当下”之类的雷同句子。'
     ].join('\n')
     const raw = await completeChat({
       baseURL: llm.baseURL,

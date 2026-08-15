@@ -288,6 +288,7 @@ export class ConfigService {
         d.apiKeyEnc = this.secrets.encrypt(update.apiKey.trim())
       }
     })
+    this.emit()
     return this.getSettings()
   }
 

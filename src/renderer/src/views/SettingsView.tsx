@@ -255,6 +255,13 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
     setTimeout(() => setSavedMsg(''), 2000)
   }
 
+  const handleSavePomodoroSettings = async (): Promise<void> => {
+    await handleSaveSettings()
+    await window.agentApi.setPomodoroOpen(pomodoroOpen)
+    setSavedMsg('番茄钟设置已保存')
+    setTimeout(() => setSavedMsg(''), 2000)
+  }
+
   const handleTest = async (): Promise<void> => {
     setTesting(true)
     setTestResult(null)
@@ -460,14 +467,7 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
           <div className="accordion-body">
             <div className="form">
               <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={pomodoroOpen}
-                  onChange={(e) => {
-                    setPomodoroOpen(e.target.checked)
-                    void window.agentApi.setPomodoroOpen(e.target.checked)
-                  }}
-                />
+                <input type="checkbox" checked={pomodoroOpen} onChange={(e) => setPomodoroOpen(e.target.checked)} />
                 打开番茄钟窗口
               </label>
               <label className="checkbox">
@@ -484,7 +484,7 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
                 格言由当前选中角色表达（需先开启显示格言）
               </label>
               <div className="row-actions">
-                <button className="btn btn-primary" onClick={() => void handleSaveSettings()}>
+                <button className="btn btn-primary" onClick={() => void handleSavePomodoroSettings()}>
                   保存番茄钟设置
                 </button>
               </div>
