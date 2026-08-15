@@ -1,0 +1,4 @@
+# 仅在开发模式（未打包）下用于调试 electron-updater。
+# 与 electron-builder.yml 的 publish 保持一致即可。
+provider: generic
+url: https://example.com/auto-updates

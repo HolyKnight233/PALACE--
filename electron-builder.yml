@@ -1,0 +1,60 @@
+appId: com.personal.agent
+productName: Personal Agent
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!tests/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!vitest.config.ts'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+asarUnpack:
+  - 'resources/**'
+# Electron 二进制下载镜像（GitHub 直连超时时使用；国内网络建议保留）
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
+win:
+  executableName: personal-agent
+  target:
+    - nsis
+    - portable
+  # 代码签名（可选）：准备好证书后二选一启用。
+  #   1) 环境变量方式（推荐，CI 友好）：CSC_LINK=<证书路径或 base64> CSC_KEY_PASSWORD=<密码>
+  #   2) 配置文件方式：取消下面两行注释，并把 .pfx 证书放到 build/ 目录
+  # certificateFile: build/cert.pfx
+  # certificatePassword: change-me
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+portable:
+  artifactName: ${name}-${version}-portable.${ext}
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+    - snap
+    - deb
+  maintainer: electronjs.org
+  category: Utility
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
+# 自动更新：把 url 改成你托管 latest.yml / *.exe 的静态服务器地址（支持 HTTP(S)/对象存储）。
+# electron-updater 会从 <url>/latest.yml 拉取版本信息。未配置有效地址时自动更新静默跳过。
+publish:
+  provider: generic
+  url: https://example.com/auto-updates
