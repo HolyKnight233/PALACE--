@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PomodoroPreset } from '../../../shared/types'
+import Dropdown from './Dropdown'
 
 function fmt(sec: number): string {
   const m = Math.floor(sec / 60)
@@ -191,13 +192,11 @@ export default function PomodoroWindow(): React.JSX.Element {
 
       <div className="pomodoro-body">
         <div className="pomodoro-presets">
-          <select className="select" value={activeId} onChange={(e) => selectPreset(e.target.value)}>
-            {presets.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            value={activeId}
+            options={presets.map((p) => ({ value: p.id, label: p.name }))}
+            onChange={selectPreset}
+          />
           <button className="btn" onClick={createPreset}>
             新建预设
           </button>

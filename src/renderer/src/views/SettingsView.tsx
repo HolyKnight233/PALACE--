@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Persona, ProviderId } from '../../../shared/types'
 import TrashView from './TrashView'
+import Dropdown from './Dropdown'
 
 interface Props {
   onSaved: (name: string, themeColor: string) => void
@@ -24,6 +25,7 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
   // 角色列表 + 当前正在编辑的角色（null 表示列表视图）
   const [personas, setPersonas] = useState<Persona[]>([])
   const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null)
+  const editingPersonaIdRef = useRef<string | null>(null)
   const [name, setName] = useState('')
   const [role, setRole] = useState('')
   const [personality, setPersonality] = useState('')
@@ -88,15 +90,34 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
     setPomodoroOpen(await window.agentApi.isPomodoroOpen())
   }
 
+  const refreshEditingPersona = async (): Promise<void> => {
+    const id = editingPersonaIdRef.current
+    if (!id) return
+    const ps = await window.agentApi.getPersonas()
+    const p = ps.find((x) => x.id === id)
+    if (!p) {
+      setEditingPersonaId(null)
+      editingPersonaIdRef.current = null
+      return
+    }
+    // 只刷新 AI 自动更新的补充提示词，避免覆盖用户正在编辑的其它字段。
+    setPersonaSupplements(p.supplements ?? '')
+    setPersonaSupplementsEnabled(p.supplementsEnabled ?? true)
+  }
+
   useEffect(() => {
     void loadPersonas()
     void loadSettings()
-    const offPersona = window.agentApi.onPersonaChanged(() => void loadPersonas())
+    const offPersona = window.agentApi.onPersonaChanged(() => {
+      void loadPersonas()
+      void refreshEditingPersona()
+    })
     const offPomodoroOpen = window.agentApi.onPomodoroOpenChanged(setPomodoroOpen)
     return () => {
       offPersona()
       offPomodoroOpen()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const toggle = (id: string): void => setOpen((o) => (o === id ? null : id))
@@ -108,9 +129,13 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
     if (!p) return
     fillPersonaForm(p)
     setEditingPersonaId(id)
+    editingPersonaIdRef.current = id
   }
 
-  const backToList = (): void => setEditingPersonaId(null)
+  const backToList = (): void => {
+    setEditingPersonaId(null)
+    editingPersonaIdRef.current = null
+  }
 
   const handleCreatePersona = async (): Promise<void> => {
     const created = await window.agentApi.createPersona()
@@ -289,15 +314,15 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
                       </div>
                       <div className="field">
                         <label>角色定位</label>
-                        <input className="input" placeholder="例如：一个贴心、可靠的个人桌面助理" value={role} onChange={(e) => setRole(e.target.value)} />
+                        <textarea className="textarea textarea-sm" placeholder="例如：一个贴心、可靠的个人桌面助理" value={role} onChange={(e) => setRole(e.target.value)} />
                       </div>
                       <div className="field">
                         <label>性格特点（用逗号分隔）</label>
-                        <input className="input" placeholder="例如：友善, 耐心, 有条理" value={personality} onChange={(e) => setPersonality(e.target.value)} />
+                        <textarea className="textarea textarea-sm" placeholder="例如：友善, 耐心, 有条理" value={personality} onChange={(e) => setPersonality(e.target.value)} />
                       </div>
                       <div className="field">
                         <label>说话风格</label>
-                        <input className="input" placeholder="例如：简洁、自然、乐于帮忙" value={speakingStyle} onChange={(e) => setSpeakingStyle(e.target.value)} />
+                        <textarea className="textarea textarea-sm" placeholder="例如：简洁、自然、乐于帮忙" value={speakingStyle} onChange={(e) => setSpeakingStyle(e.target.value)} />
                       </div>
                       <div className="field">
                         <label>自定义系统提示词（可选，会附加到人设之后）</label>
@@ -358,13 +383,11 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
             <div className="form">
               <div className="field">
                 <label>服务商</label>
-                <select className="select" value={provider} onChange={(e) => handleProviderChange(e.target.value as ProviderId)}>
-                  {PROVIDERS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown
+                  value={provider}
+                  options={PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
+                  onChange={(v) => handleProviderChange(v as ProviderId)}
+                />
               </div>
               <div className="field">
                 <label>API 地址（baseURL）</label>
@@ -373,14 +396,14 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
               <div className="field">
                 <label>模型</label>
                 {provider === 'deepseek' ? (
-                  <select className="select" value={model} onChange={(e) => setModel(e.target.value)}>
-                    {DEEPSEEK_MODELS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                    {model && !DEEPSEEK_MODELS.some((m) => m.id === model) && <option value={model}>{model}</option>}
-                  </select>
+                  <Dropdown
+                    value={model}
+                    options={[
+                      ...DEEPSEEK_MODELS.map((m) => ({ value: m.id, label: m.label })),
+                      ...(model && !DEEPSEEK_MODELS.some((m) => m.id === model) ? [{ value: model, label: model }] : [])
+                    ]}
+                    onChange={setModel}
+                  />
                 ) : (
                   <input className="input mono" value={model} onChange={(e) => setModel(e.target.value)} />
                 )}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Conversation, Persona } from '../../../shared/types'
+import Dropdown from './Dropdown'
 
 interface Props {
   conversations: Conversation[]
@@ -146,13 +147,11 @@ export default function ConversationList({
               <div className="modal-body">
                 <div className="field">
                   <label>对话角色</label>
-                  <select className="select" value={newPersonaId} onChange={(e) => setNewPersonaId(e.target.value)}>
-                    {personas.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Dropdown
+                    value={newPersonaId}
+                    options={personas.map((p) => ({ value: p.id, label: p.name }))}
+                    onChange={setNewPersonaId}
+                  />
                 </div>
                 <div className="row-actions">
                   <button className="btn btn-primary" onClick={confirmNew}>
