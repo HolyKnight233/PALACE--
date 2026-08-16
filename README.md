@@ -1,6 +1,7 @@
 # PALACE
 
 一个仅面向 Windows 的个人桌面助手：**自定义人设 + 流式聊天 + 本地日程（系统通知提醒）+ 番茄钟 + 文件处理**，用 Electron + TypeScript + React 构建，可打包成安装包与免安装便携版。
+本项目主要使用DeepSeek-V4-Pro结合DeepSeek Harness完成，属于Vibe Coding项目，如有不完善之处请谅解。
 
 ## 功能
 
