@@ -13,7 +13,6 @@ import {
 import { isAbsolute, join } from 'path'
 import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { autoUpdater } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import { ConfigService } from './config/config'
 import type { SecretStore } from './config/config'
@@ -293,29 +292,6 @@ function createTray(): void {
   tray.on('click', () => showMainWindow())
 }
 
-function setupAutoUpdater(): void {
-  autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
-  autoUpdater.on('update-downloaded', (info) => {
-    dialog
-      .showMessageBox({
-        type: 'info',
-        title: '发现新版本',
-        message: `新版本 ${info.version} 已下载完成，是否立即重启安装？`,
-        buttons: ['立即重启', '稍后']
-      })
-      .then((res) => {
-        if (res.response === 0) autoUpdater.quitAndInstall()
-      })
-  })
-  autoUpdater.on('error', (err) => {
-    console.error('[updater]', err?.message ?? String(err))
-  })
-  autoUpdater.checkForUpdates().catch(() => {
-    /* no update server reachable / not configured */
-  })
-}
-
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1600,
@@ -468,10 +444,6 @@ app.whenReady().then(async () => {
   createTray()
   createWindow()
   if (config.getPomodoroOpen()) showPomodoroWindow()
-
-  if (app.isPackaged) {
-    setupAutoUpdater()
-  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

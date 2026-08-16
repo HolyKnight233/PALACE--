@@ -8,7 +8,7 @@ files:
   - '!tests/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!vitest.config.ts'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
@@ -53,9 +53,3 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-# 自动更新：把 url 改成你托管 latest.yml / *.exe 的静态服务器地址（支持 HTTP(S)/对象存储）。
-# electron-updater 会从 <url>/latest.yml 拉取版本信息。未配置有效地址时自动更新静默跳过。
-# 目前未配置，自动更新默认关闭。要启用时，取消下面注释并填入真实地址：
-# publish:
-#   provider: generic
-#   url: https://example.com/auto-updates
