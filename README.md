@@ -55,9 +55,9 @@ npm run build:win   # 类型检查 + 构建 + 打包
 
 ## 自动更新
 
-内置 `electron-updater`，走 `generic`（静态服务器）提供方。启用步骤：
+内置 `electron-updater`，走 `generic`（静态服务器）提供方。**默认关闭**，启用步骤：
 
-1. 把 `electron-builder.yml` 里 `publish.url` 改成你托管更新包的地址（如 `https://updates.example.com/my-agent`）。
+1. 取消 `electron-builder.yml` 里 `publish` 段的注释，并把 `url` 改成你托管更新包的地址（如 `https://updates.example.com/my-agent`）。
 2. 每次发布时，把 `dist/` 下的 `palace-<version>-setup.exe`、`palace-<version>-setup.exe.blockmap` 和 `latest.yml` 一并上传到该地址。
 3. 用户安装后应用会自动检查更新，下载完成后提示重启安装。
 
