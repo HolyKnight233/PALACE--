@@ -31,6 +31,10 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # 安装向导模式（允许用户在安装时选择安装路径）
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
 portable:
   artifactName: ${name}-${version}-portable.${ext}
 mac:
