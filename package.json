@@ -1,6 +1,6 @@
 {
   "name": "palace",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Personal desktop AI agent with custom persona, chat, scheduling, and file organization",
   "main": "./out/main/index.js",
   "author": "Personal",
