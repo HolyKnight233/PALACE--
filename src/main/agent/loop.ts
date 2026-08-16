@@ -7,6 +7,7 @@ import type { ChatMessage, Conversation, ToolCallPart } from '../../shared/types
 import { buildSystemPrompt } from './systemPrompt'
 import type { ToolContext, ToolRegistry } from './registry'
 import { messagesToApi, selectHistory } from './messages'
+import { maybeRetrieveSupplements } from './supplements'
 
 export interface ChatSink {
   onDelta(text: string): void
@@ -45,7 +46,16 @@ export class AgentRunner {
     const selection = selectHistory(all)
     const summary = await this.updateSummary(conversationId, selection.dropped, conversation, llm)
 
-    const system = buildSystemPrompt(persona, this.registry.names(), { summary })
+    // 用最近几条消息做 query，从补充提示词条目库里检索相关条目（条目少则全文注入）。
+    const query = all
+      .slice(-4)
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => m.content ?? '')
+      .join(' ')
+    const supplements =
+      maybeRetrieveSupplements(persona.supplements ?? '', query) ?? (persona.supplements ?? '')
+
+    const system = buildSystemPrompt(persona, this.registry.names(), { summary, supplements })
     const tools = this.registry.toOpenAI()
     const apiMessages = messagesToApi(selection.selected, system)
 

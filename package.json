@@ -1,5 +1,5 @@
 {
-  "name": "personal-agent",
+  "name": "palace",
   "version": "0.1.0",
   "description": "Personal desktop AI agent with custom persona, chat, scheduling, and file organization",
   "main": "./out/main/index.js",
@@ -23,7 +23,13 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "chrono-node": "^2.7.8",
+    "docx": "^9.7.1",
     "electron-updater": "^6.3.9",
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.1",
+    "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.19.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -31,6 +37,8 @@
     "@electron-toolkit/eslint-config-ts": "^3.1.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@types/node": "^22.19.1",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
@@ -41,6 +49,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
+    "lucide-react": "^1.31.0",
     "prettier": "^3.7.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",

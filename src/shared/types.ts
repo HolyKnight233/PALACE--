@@ -95,7 +95,8 @@ export interface CalendarEvent {
   /** Epoch milliseconds. */
   endAt?: number
   allDay: boolean
-  location?: string
+  /** 是否已完成（用于绿色对钩/边框）。 */
+  completed?: boolean
   /** Minutes before start to fire a reminder. */
   reminderMinutes?: number
   createdAt: number
@@ -109,6 +110,16 @@ export interface PomodoroPreset {
   breakMinutes: number
   /** 循环次数；0 表示无限循环。 */
   loopCount: number
+}
+
+/** 番茄钟计时器当前状态。 */
+export interface PomodoroState {
+  running: boolean
+  phase: 'work' | 'break'
+  remainingSeconds: number
+  /** 当前是第几轮（从 0 开始）。 */
+  cycle: number
+  presetName: string
 }
 
 export interface ChatStreamEvent {
@@ -157,6 +168,14 @@ export interface AgentApi {
   getDefaultSettings(): Promise<Settings>
   saveSettings(update: SettingsUpdate): Promise<Settings>
   testConnection(): Promise<ConnectionTestResult>
+  /** 当前数据存储目录（绝对路径）。 */
+  getDataDir(): Promise<string>
+  /** 迁移数据到新目录并写入引导文件；返回是否成功与错误信息。 */
+  setDataDir(dir: string): Promise<{ ok: boolean; error?: string }>
+  /** 打开系统目录选择框，返回所选目录路径或 null。 */
+  selectDirectory(): Promise<string | null>
+  /** 重启应用。 */
+  relaunchApp(): Promise<void>
 
   chatSend(payload: { conversationId?: string; message: string }): Promise<{ conversationId: string }>
   chatStop(conversationId: string): Promise<void>
@@ -180,7 +199,6 @@ export interface AgentApi {
     endAt?: number
     allDay?: boolean
     description?: string
-    location?: string
     reminderMinutes?: number
   }): Promise<CalendarEvent>
   updateEvent(
@@ -191,7 +209,7 @@ export interface AgentApi {
       endAt: number
       allDay: boolean
       description: string
-      location: string
+      completed: boolean
       reminderMinutes: number
     }>
   ): Promise<CalendarEvent>
@@ -206,11 +224,22 @@ export interface AgentApi {
   createPomodoro(): Promise<PomodoroPreset>
   deletePomodoro(id: string): Promise<PomodoroPreset>
   onPomodoroChanged(callback: () => void): () => void
-  /** 番茄钟独立窗口的控制（打开/最小化/关闭）。 */
+  /** 番茄钟计时控制（开始/暂停/切换/重置/查询状态）。 */
+  pomodoroStart(): Promise<void>
+  pomodoroPause(): Promise<void>
+  pomodoroToggle(): Promise<void>
+  pomodoroReset(): Promise<void>
+  getPomodoroState(): Promise<PomodoroState>
+  onPomodoroState(callback: (state: PomodoroState) => void): () => void
+  /** 番茄钟独立窗口的控制（打开/最小化/关闭/置顶）。 */
   pomodoroWindow: {
     open(): Promise<void>
     minimize(): Promise<void>
     close(): Promise<void>
+    /** 置顶 / 取消置顶。 */
+    setAlwaysOnTop(flag: boolean): Promise<void>
+    /** 当前是否置顶。 */
+    isAlwaysOnTop(): Promise<boolean>
   }
   /** 打开/关闭番茄钟窗口。 */
   setPomodoroOpen(open: boolean): Promise<void>
@@ -225,6 +254,8 @@ export interface AgentApi {
   generateMotto(): Promise<{ personaName: string; motto: string }>
   /** 番茄钟窗口打开时获取当前主题色与当前对话角色。 */
   getPomodoroContext(): Promise<{ color: string; personaId: string | null }>
+  /** 获取拖入的文件/文件夹的本地绝对路径。 */
+  getPathForFile(file: File): string
 
   notify(title: string, body: string): Promise<void>
   windowControls: WindowControls

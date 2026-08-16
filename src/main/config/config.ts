@@ -52,6 +52,11 @@ interface ConfigShape {
   personas: Persona[]
   pomodoros: PomodoroPreset[]
   activePomodoroId: string
+  /** 番茄钟窗口的开关状态，重启后据此决定是否自动打开。 */
+  pomodoroOpen: boolean
+  /** 番茄钟窗口上次关闭时的位置（屏幕坐标），用于重新打开时恢复。 */
+  pomodoroX: number | null
+  pomodoroY: number | null
   settings: {
     provider: ProviderId
     baseURL: string
@@ -79,6 +84,9 @@ export class ConfigService {
       personas: [DEFAULT_PERSONA],
       pomodoros: [DEFAULT_POMODORO],
       activePomodoroId: 'default',
+      pomodoroOpen: true,
+      pomodoroX: null,
+      pomodoroY: null,
       settings: defaultSettings(),
       apiKeyEnc: null
     }))
@@ -260,6 +268,35 @@ export class ConfigService {
     })
     this.emit()
     return this.getActivePomodoro()
+  }
+
+  /** 番茄钟窗口上次是否处于打开状态（用于重启后恢复）。 */
+  getPomodoroOpen(): boolean {
+    return this.store.read().pomodoroOpen
+  }
+
+  /** 记录番茄钟窗口的开关状态；不触发广播，打开状态由主进程单独广播。 */
+  setPomodoroOpen(open: boolean): void {
+    this.store.update((d) => {
+      d.pomodoroOpen = open
+    })
+  }
+
+  /** 番茄钟窗口上次关闭时的位置；无记录时为 null。 */
+  getPomodoroPosition(): { x: number; y: number } | null {
+    const d = this.store.read()
+    if (typeof d.pomodoroX === 'number' && typeof d.pomodoroY === 'number') {
+      return { x: d.pomodoroX, y: d.pomodoroY }
+    }
+    return null
+  }
+
+  /** 记录番茄钟窗口的位置；不触发广播。 */
+  setPomodoroPosition(x: number, y: number): void {
+    this.store.update((d) => {
+      d.pomodoroX = x
+      d.pomodoroY = y
+    })
   }
 
   getSettings(): Settings {

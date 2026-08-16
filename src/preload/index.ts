@@ -1,7 +1,8 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import type { AgentApi, ChatStreamEvent } from '../shared/types'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { AgentApi, ChatStreamEvent, PomodoroState } from '../shared/types'
 
 const api: AgentApi = {
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   getDefaultPersona: () => ipcRenderer.invoke('persona:getDefault'),
   savePersona: (persona) => ipcRenderer.invoke('persona:save', persona),
   getPersonas: () => ipcRenderer.invoke('persona:list'),
@@ -23,6 +24,10 @@ const api: AgentApi = {
   getDefaultSettings: () => ipcRenderer.invoke('settings:getDefault'),
   saveSettings: (update) => ipcRenderer.invoke('settings:save', update),
   testConnection: () => ipcRenderer.invoke('settings:test'),
+  getDataDir: () => ipcRenderer.invoke('settings:getDataDir'),
+  setDataDir: (dir) => ipcRenderer.invoke('settings:setDataDir', dir),
+  selectDirectory: () => ipcRenderer.invoke('app:selectDirectory'),
+  relaunchApp: () => ipcRenderer.invoke('app:relaunch'),
 
   chatSend: (payload) => ipcRenderer.invoke('chat:send', payload),
   chatStop: (conversationId) => ipcRenderer.invoke('chat:stop', conversationId),
@@ -74,11 +79,25 @@ const api: AgentApi = {
       ipcRenderer.removeListener('pomodoro:changed', listener)
     }
   },
+  pomodoroStart: () => ipcRenderer.invoke('pomodoro:start'),
+  pomodoroPause: () => ipcRenderer.invoke('pomodoro:pause'),
+  pomodoroToggle: () => ipcRenderer.invoke('pomodoro:toggle'),
+  pomodoroReset: () => ipcRenderer.invoke('pomodoro:reset'),
+  getPomodoroState: () => ipcRenderer.invoke('pomodoro:state'),
+  onPomodoroState: (callback) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: PomodoroState): void => callback(state)
+    ipcRenderer.on('pomodoro:state', listener)
+    return () => {
+      ipcRenderer.removeListener('pomodoro:state', listener)
+    }
+  },
 
   pomodoroWindow: {
     open: () => ipcRenderer.invoke('pomodoro:open'),
     minimize: () => ipcRenderer.invoke('pomodoro:minimize'),
-    close: () => ipcRenderer.invoke('pomodoro:close')
+    close: () => ipcRenderer.invoke('pomodoro:close'),
+    setAlwaysOnTop: (flag) => ipcRenderer.invoke('pomodoro:setAlwaysOnTop', flag),
+    isAlwaysOnTop: () => ipcRenderer.invoke('pomodoro:isAlwaysOnTop')
   },
   setPomodoroOpen: (open) => ipcRenderer.invoke('pomodoro:setOpen', open),
   isPomodoroOpen: () => ipcRenderer.invoke('pomodoro:isOpen'),

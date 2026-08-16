@@ -92,7 +92,7 @@ function App(): React.JSX.Element {
     <div className={`window${maximized ? ' maximized' : ''}`}>
       <div className="window-content">
         <div className="titlebar" onDoubleClick={toggleMaximize}>
-          <div className="titlebar-title">个人助手</div>
+          <div className="titlebar-title">PALACE</div>
           <div className="titlebar-controls">
             <button className="titlebar-btn" onClick={() => void window.agentApi.windowControls.minimize()} title="最小化">
               ─
@@ -107,7 +107,7 @@ function App(): React.JSX.Element {
         </div>
         <div className="app-body">
           <PanelGroup direction="horizontal" autoSaveId="main-layout-v2" className="app">
-            <Panel defaultSize={18} minSize={14} className="panel">
+            <Panel defaultSize={21.3} minSize={14} className="panel">
               <div className="left-scroll">
                 <ConversationList
                   conversations={conversations}
@@ -120,7 +120,7 @@ function App(): React.JSX.Element {
               </div>
             </Panel>
             <PanelResizeHandle className="resize-handle" />
-            <Panel defaultSize={52} minSize={30} className="panel">
+            <Panel defaultSize={55.1} minSize={30} className="panel">
               <ChatView
                 activeId={activeId}
                 title={activeConv?.title ?? '新对话'}
@@ -129,7 +129,7 @@ function App(): React.JSX.Element {
               />
             </Panel>
             <PanelResizeHandle className="resize-handle" />
-            <Panel defaultSize={30} minSize={20} className="panel">
+            <Panel defaultSize={23.6} minSize={20} className="panel">
               <RightPanel onPersonaSaved={applyPersona} />
             </Panel>
           </PanelGroup>

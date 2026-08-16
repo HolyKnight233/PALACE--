@@ -4,6 +4,8 @@ import type { Persona } from '../../shared/types'
 export interface SystemPromptOptions {
   /** 滚动摘要（被裁剪出窗口的更早历史）。 */
   summary?: string
+  /** 补充提示词内容（可能是 RAG 检索后的相关条目，或全文）。 */
+  supplements?: string
 }
 
 export function buildSystemPrompt(persona: Persona, toolNames: string[], options: SystemPromptOptions = {}): string {
@@ -17,7 +19,7 @@ export function buildSystemPrompt(persona: Persona, toolNames: string[], options
     .filter(Boolean)
     .join('\n')
 
-  const supplements = persona.supplements?.trim()
+  const supplements = options.supplements?.trim()
   const supplementsEnabled = persona.supplementsEnabled ?? true
   const summary = options.summary?.trim()
 
@@ -49,6 +51,7 @@ export function buildSystemPrompt(persona: Persona, toolNames: string[], options
     '- 用自然语言友好地回复用户，永远不要向用户输出工具调用的原始 JSON。',
     '- 涉及日程时，把用户说的相对时间（如“明天下午三点”“下周五”）原样传给工具，由工具解析，不要自己臆造具体时间。',
     '- 不要删除用户的日程，除非用户明确要求。',
+    '- 涉及文件时，读取文件后基于其内容总结或回答；生成文件前，若目标文件已存在，请先提醒用户，避免覆盖重要内容。读取或生成 .docx/.pdf/.xlsx/.csv 时按工具说明的格式约定处理（Word/PDF 用标题/列表/段落，Excel/CSV 用行列）；需要时可用搜索工具按文件名或内容查找文件、查看或解压 zip。',
     '- 如果工具报错或你不确定，如实说明并向用户询问，不要编造结果。'
   ].join('\n')
 }

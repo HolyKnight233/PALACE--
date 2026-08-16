@@ -50,7 +50,6 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
   const [closeToTray, setCloseToTray] = useState(true)
   const [pomodoroShowMotto, setPomodoroShowMotto] = useState(true)
   const [pomodoroMottoByPersona, setPomodoroMottoByPersona] = useState(true)
-  const [pomodoroOpen, setPomodoroOpen] = useState(true)
 
   const [savedMsg, setSavedMsg] = useState('')
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
@@ -58,6 +57,9 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
   const [showGenerate, setShowGenerate] = useState(false)
   const [generateReq, setGenerateReq] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [dataDir, setDataDir] = useState('')
+  const [pendingDir, setPendingDir] = useState('')
+  const [showMoveConfirm, setShowMoveConfirm] = useState(false)
 
   const loadPersonas = async (): Promise<void> => {
     setPersonas(await window.agentApi.getPersonas())
@@ -87,7 +89,26 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
     setCloseToTray(s.closeToTray)
     setPomodoroShowMotto(s.pomodoroShowMotto ?? true)
     setPomodoroMottoByPersona(s.pomodoroMottoByPersona ?? true)
-    setPomodoroOpen(await window.agentApi.isPomodoroOpen())
+    setDataDir(await window.agentApi.getDataDir())
+  }
+
+  const chooseDirectory = async (): Promise<void> => {
+    const dir = await window.agentApi.selectDirectory()
+    if (!dir) return
+    setPendingDir(dir)
+    setShowMoveConfirm(true)
+  }
+
+  const confirmMove = async (): Promise<void> => {
+    setShowMoveConfirm(false)
+    const res = await window.agentApi.setDataDir(pendingDir)
+    if (res.ok) {
+      setSavedMsg('数据位置已更改，正在重启…')
+      setTimeout(() => void window.agentApi.relaunchApp(), 800)
+    } else {
+      setSavedMsg(res.error ?? '更改失败')
+      setTimeout(() => setSavedMsg(''), 3000)
+    }
   }
 
   const refreshEditingPersona = async (): Promise<void> => {
@@ -112,10 +133,8 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
       void loadPersonas()
       void refreshEditingPersona()
     })
-    const offPomodoroOpen = window.agentApi.onPomodoroOpenChanged(setPomodoroOpen)
     return () => {
       offPersona()
-      offPomodoroOpen()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -224,18 +243,6 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
     }
   }
 
-  const handleResetSettings = async (): Promise<void> => {
-    const d = await window.agentApi.getDefaultSettings()
-    setProvider(d.provider)
-    setBaseURL(d.baseURL)
-    setModel(d.model)
-    setTemperature(String(d.temperature))
-    setLaunchAtLogin(d.launchAtLogin)
-    setCloseToTray(d.closeToTray)
-    setPomodoroShowMotto(d.pomodoroShowMotto ?? true)
-    setPomodoroMottoByPersona(d.pomodoroMottoByPersona ?? true)
-  }
-
   const handleSaveSettings = async (): Promise<void> => {
     await window.agentApi.saveSettings({
       provider,
@@ -257,7 +264,6 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
 
   const handleSavePomodoroSettings = async (): Promise<void> => {
     await handleSaveSettings()
-    await window.agentApi.setPomodoroOpen(pomodoroOpen)
     setSavedMsg('番茄钟设置已保存')
     setTimeout(() => setSavedMsg(''), 2000)
   }
@@ -332,7 +338,7 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
                         <textarea className="textarea textarea-sm" placeholder="例如：简洁、自然、乐于帮忙" value={speakingStyle} onChange={(e) => setSpeakingStyle(e.target.value)} />
                       </div>
                       <div className="field">
-                        <label>自定义系统提示词（可选，会附加到人设之后）</label>
+                        <label>自定义提示词（可选，会附加到人设之后）</label>
                         <textarea className="textarea" placeholder="例如：你只回答和用户工作相关的问题……" value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} />
                       </div>
                       <div className="field">
@@ -431,9 +437,6 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
                 <button className="btn" disabled={testing} onClick={() => void handleTest()}>
                   {testing ? '测试中…' : '测试连接'}
                 </button>
-                <button className="btn" onClick={() => void handleResetSettings()}>
-                  恢复默认
-                </button>
               </div>
               {testResult && (
                 <div className={testResult.ok ? 'result-ok' : 'result-err'}>
@@ -467,14 +470,10 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
           <div className="accordion-body">
             <div className="form">
               <label className="checkbox">
-                <input type="checkbox" checked={pomodoroOpen} onChange={(e) => setPomodoroOpen(e.target.checked)} />
-                打开番茄钟窗口
-              </label>
-              <label className="checkbox">
                 <input type="checkbox" checked={pomodoroShowMotto} onChange={(e) => setPomodoroShowMotto(e.target.checked)} />
                 显示格言
               </label>
-              <label className="checkbox">
+              <label className="checkbox checkbox-top">
                 <input
                   type="checkbox"
                   checked={pomodoroMottoByPersona}
@@ -509,6 +508,16 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
                 <input type="checkbox" checked={closeToTray} onChange={(e) => setCloseToTray(e.target.checked)} />
                 关闭窗口时最小化到托盘
               </label>
+              <div className="field">
+                <label>数据存储位置</label>
+                <div className="row-actions">
+                  <input className="input mono" style={{ flex: 1 }} value={dataDir} readOnly />
+                  <button className="btn" onClick={() => void chooseDirectory()}>
+                    选择新位置…
+                  </button>
+                </div>
+                <div className="hint">更改后会把现有数据迁移到新位置并重启应用。</div>
+              </div>
               <div className="row-actions">
                 <button className="btn btn-primary" onClick={() => void handleSaveSettings()}>
                   保存系统设置
@@ -595,6 +604,32 @@ export default function SettingsView({ onSaved }: Props): React.JSX.Element {
                   确定删除
                 </button>
                 <button className="btn" onClick={() => setShowDeleteConfirm(false)}>
+                  取消
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showMoveConfirm && (
+        <>
+          <div className="modal-overlay" onClick={() => setShowMoveConfirm(false)} />
+          <div className="modal">
+            <div className="modal-header">
+              <span className="modal-title">迁移数据位置</span>
+            </div>
+            <div className="modal-body">
+              <div className="hint">将把现有数据迁移到：</div>
+              <div className="hint mono" style={{ wordBreak: 'break-all' }}>
+                {pendingDir}
+              </div>
+              <div className="hint">迁移后应用会重启；原目录数据会保留作为备份。</div>
+              <div className="row-actions">
+                <button className="btn btn-primary" onClick={() => void confirmMove()}>
+                  迁移并重启
+                </button>
+                <button className="btn" onClick={() => setShowMoveConfirm(false)}>
                   取消
                 </button>
               </div>

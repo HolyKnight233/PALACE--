@@ -1,5 +1,5 @@
-appId: com.personal.agent
-productName: Personal Agent
+appId: com.palace.app
+productName: PALACE
 directories:
   buildResources: build
 files:
@@ -17,7 +17,7 @@ asarUnpack:
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
 win:
-  executableName: personal-agent
+  executableName: palace
   target:
     - nsis
     - portable

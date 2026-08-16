@@ -1,9 +1,23 @@
 import type { z } from 'zod'
 import type { ScheduleService } from '../services/schedule'
+import type { FileService } from '../services/files'
+import type { PomodoroTimer } from '../services/pomodoro'
+
+/** 番茄钟窗口的控制（供 Agent 工具使用）。 */
+export interface PomodoroWindowControl {
+  open(): void
+  close(): void
+  minimize(): void
+  isOpen(): boolean
+  setAlwaysOnTop(flag: boolean): void
+}
 
 /** Dependencies available to every tool handler. */
 export interface ToolContext {
   schedule: ScheduleService
+  files: FileService
+  pomodoro: PomodoroTimer
+  pomodoroWindow: PomodoroWindowControl
 }
 
 export interface Tool<C = ToolContext> {

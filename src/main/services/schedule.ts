@@ -17,6 +17,12 @@ export class ScheduleService {
 
   async load(): Promise<void> {
     await this.store.load()
+    // 迁移：彻底移除旧数据中已废弃的「地点」字段。
+    this.store.update((d) => {
+      for (const e of d.events) {
+        delete (e as unknown as Record<string, unknown>).location
+      }
+    })
   }
 
   private emit(): void {

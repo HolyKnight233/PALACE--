@@ -3,9 +3,11 @@ import { z } from 'zod'
 import type { ConfigService } from '../config/config'
 import type { ChatService } from '../services/chat'
 import type { ScheduleService } from '../services/schedule'
+import type { PomodoroTimer } from '../services/pomodoro'
 import type { AgentRunner } from '../agent/loop'
 import type { ToolContext, ToolRegistry } from '../agent/registry'
 import { completeChat, pingLLM } from '../llm/openaiCompat'
+import { countSupplements, MAX_SUPPLEMENT_ITEMS, COMPRESS_TARGET_ITEMS } from '../agent/supplements'
 import type {
   ChatStreamEvent,
   EventRange,
@@ -21,7 +23,6 @@ const createEventSchema = z.object({
   endAt: z.number().optional(),
   allDay: z.boolean().optional(),
   description: z.string().optional(),
-  location: z.string().optional(),
   reminderMinutes: z.number().optional()
 })
 
@@ -43,7 +44,7 @@ const updateEventSchema = z.object({
   endAt: z.number().optional(),
   allDay: z.boolean().optional(),
   description: z.string().optional(),
-  location: z.string().optional(),
+  completed: z.boolean().optional(),
   reminderMinutes: z.number().optional()
 })
 
@@ -51,6 +52,7 @@ interface Deps {
   config: ConfigService
   chat: ChatService
   schedule: ScheduleService
+  pomodoro: PomodoroTimer
   runner: AgentRunner
   registry: ToolRegistry<ToolContext>
   getWindow: () => BrowserWindow | null
@@ -58,6 +60,10 @@ interface Deps {
   showPomodoroWindow: () => void
   isPomodoroOpen: () => boolean
   closePomodoroWindow: () => void
+  getDataDir: () => string
+  setDataDir: (dir: string) => Promise<{ ok: boolean; error?: string }>
+  selectDirectory: () => Promise<string | null>
+  relaunchApp: () => void
 }
 
 export function registerIpc(deps: Deps): void {
@@ -65,12 +71,17 @@ export function registerIpc(deps: Deps): void {
     config,
     chat,
     schedule,
+    pomodoro,
     runner,
     getWindow,
     applyRuntimeSettings,
     showPomodoroWindow,
     isPomodoroOpen,
-    closePomodoroWindow
+    closePomodoroWindow,
+    getDataDir,
+    setDataDir,
+    selectDirectory,
+    relaunchApp
   } = deps
   const active = new Map<string, AbortController>()
 
@@ -111,27 +122,58 @@ export function registerIpc(deps: Deps): void {
     }
   }
 
-  // 以「助手在对话中的自我表现」为第一手资料，提炼角色的稳定人设，输出成补充提示词。
+  // 以「助手在对话中的自我表现」为第一手资料，提炼本轮新增的人设条目（增量，供 RAG 检索）。
   const mergeSupplements = async (
     llm: { baseURL: string; apiKey: string; model: string },
     existing: string,
     dialogue: string
   ): Promise<string> => {
     const prompt = [
-      '你是角色人设整理器。请根据下面的对话，提炼该角色的稳定人设，输出成一份「补充提示词」清单，用于在后续对话中保持一致。',
+      '你是角色人设提炼器。请根据下面的「对话」，提炼出本轮新出现的、关于该角色的稳定人设要点（设定、事实、剧情、规则），用于在后续对话中保持一致。',
       '人设要点的第一手资料是「助手」的回复：请从助手在对话中的说话方式、自称、背景故事、世界观、行为准则、以及它主动确立的设定里，概括出角色稳定、需要长期保持的特征。',
       '「用户」的消息作为补充来源：用户给角色的设定、对角色行为的修正、与角色相关的剧情或背景。',
       '提炼要求（必须遵守）：',
+      '- 只输出「本轮对话中新出现」的要点；「已有内容」里已经存在的，不要重复输出。',
       '- 输出的是「关于该角色的客观人设要点」，用普通话、直白、概括性的短句描述，绝不照抄任何一方的原话。',
       '- 例：助手说「我这人只记遗言，不记别的」，应概括为「角色只负责记录遗言」，而不是照抄原句。',
-      '- 每条一句话、用分号分隔、每条都能独立看懂',
-      '- 只保留对后续对话有用、能避免人设前后矛盾的稳定特征；忽略寒暄、闲聊、一次性内容。',
-      '- 若已有内容晦涩混乱，请把它重新整理成清晰条目。',
+      '- 每条一句话、用分号分隔、每条都能独立看懂。',
+      '- 不要把角色的名字、性格、说话风格等身份信息写进来（这些已单独保存），只记录新确立的设定、事实、剧情与规则。',
+      '- 忽略寒暄、闲聊、一次性内容；若本轮没有新的长期人设信息，就什么都不输出，直接留空。',
       '',
       `已有内容：${existing || '（空）'}`,
       '',
       '对话：',
       dialogue
+    ].join('\n')
+    const raw = await completeChat({
+      baseURL: llm.baseURL,
+      apiKey: llm.apiKey,
+      model: llm.model,
+      temperature: 0.3,
+      messages: [{ role: 'user', content: prompt }]
+    })
+    const next = raw.trim()
+    // 兜底：模型偶尔会把「空字符串/空」字面输出，此时视为空，避免污染条目库。
+    if (next === '空字符串' || next === '（空字符串）' || next === '（空）' || next === '空') return ''
+    return next
+  }
+
+  // 条目达到上限时，把整份清单智能合并压缩到目标条数以内。
+  const compressSupplements = async (
+    llm: { baseURL: string; apiKey: string; model: string },
+    supplements: string
+  ): Promise<string> => {
+    const prompt = [
+      '你是角色人设整理器。下面是一份角色的人设条目清单，可能含有重复、相似、过时的条目。请把它整理成一份更精简的清单。',
+      '整理要求：',
+      '- 合并意思相近的条目；删除重复、过时、不再重要的条目。',
+      '- 保留最重要、最能避免角色前后矛盾的设定。',
+      `- 目标：压缩到 ${COMPRESS_TARGET_ITEMS} 条以内。`,
+      '- 每条一句话、用分号分隔、客观直白、不复述原话。',
+      '- 只输出整理后的清单本身，不要任何解释。',
+      '',
+      '条目清单：',
+      supplements
     ].join('\n')
     const raw = await completeChat({
       baseURL: llm.baseURL,
@@ -166,7 +208,14 @@ export function registerIpc(deps: Deps): void {
       if (!dialogue.trim()) return
 
       const next = await mergeSupplements({ baseURL, apiKey, model }, persona.supplements ?? '', dialogue)
-      if (next !== (persona.supplements ?? '')) config.setPersonaSupplements(persona.id, next)
+      if (next) {
+        const existing = (persona.supplements ?? '').trim()
+        let merged = existing ? `${existing}；${next}` : next
+        if (countSupplements(merged) >= MAX_SUPPLEMENT_ITEMS) {
+          merged = await compressSupplements({ baseURL, apiKey, model }, merged)
+        }
+        config.setPersonaSupplements(persona.id, merged)
+      }
     } catch (err) {
       console.error('[supplements]', err)
     }
@@ -228,6 +277,14 @@ export function registerIpc(deps: Deps): void {
     return pingLLM({ baseURL: llm.baseURL, apiKey: llm.apiKey, model: llm.model })
   })
 
+  // ---- data directory ----
+  ipcMain.handle('settings:getDataDir', () => getDataDir())
+  ipcMain.handle('settings:setDataDir', (_e, dir: string) => setDataDir(String(dir ?? '')))
+  ipcMain.handle('app:selectDirectory', () => selectDirectory())
+  ipcMain.handle('app:relaunch', () => {
+    relaunchApp()
+  })
+
   // ---- chat ----
   ipcMain.handle('chat:send', (_e, payload: { conversationId?: string; message: string }) => {
     const message = String(payload?.message ?? '')
@@ -285,7 +342,6 @@ export function registerIpc(deps: Deps): void {
       endAt: parsed.endAt,
       allDay: parsed.allDay ?? false,
       description: parsed.description,
-      location: parsed.location,
       reminderMinutes: parsed.reminderMinutes
     })
   })
@@ -328,6 +384,28 @@ export function registerIpc(deps: Deps): void {
       w.setBounds({ x, y, width, height: compact ? 350 : 400 })
     }
   })
+  ipcMain.handle('pomodoro:setAlwaysOnTop', (e, flag: boolean) => {
+    BrowserWindow.fromWebContents(e.sender)?.setAlwaysOnTop(Boolean(flag))
+  })
+  ipcMain.handle('pomodoro:isAlwaysOnTop', (e) => {
+    const w = BrowserWindow.fromWebContents(e.sender)
+    return w ? w.isAlwaysOnTop() : false
+  })
+
+  // ---- pomodoro timer ----
+  ipcMain.handle('pomodoro:start', () => {
+    pomodoro.start()
+  })
+  ipcMain.handle('pomodoro:pause', () => {
+    pomodoro.pause()
+  })
+  ipcMain.handle('pomodoro:toggle', () => {
+    pomodoro.toggle()
+  })
+  ipcMain.handle('pomodoro:reset', () => {
+    pomodoro.reset()
+  })
+  ipcMain.handle('pomodoro:state', () => pomodoro.getState())
 
   // ---- theme sync & pomodoro motto ----
   ipcMain.handle('theme:set', (_e, color: string, personaId: string | null) => {

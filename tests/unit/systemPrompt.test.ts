@@ -48,12 +48,12 @@ describe('buildSystemPrompt', () => {
   })
 
   it('injects persona supplements when enabled', () => {
-    const p = buildSystemPrompt({ ...persona, supplements: '角色补充内容', supplementsEnabled: true }, [])
+    const p = buildSystemPrompt(persona, [], { supplements: '角色补充内容' })
     expect(p).toContain('角色补充内容')
   })
 
   it('omits persona supplements when disabled', () => {
-    const p = buildSystemPrompt({ ...persona, supplements: '角色补充内容', supplementsEnabled: false }, [])
+    const p = buildSystemPrompt({ ...persona, supplementsEnabled: false }, [], { supplements: '角色补充内容' })
     expect(p).not.toContain('角色补充内容')
   })
 })

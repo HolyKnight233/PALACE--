@@ -38,12 +38,35 @@ function formatDividerTime(ts: number): string {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${hm}`
 }
 
+function toolVerb(name: string): string {
+  switch (name) {
+    case 'file_read':
+      return '查看文件'
+    case 'file_write':
+      return '写入文件'
+    case 'file_list':
+      return '浏览目录'
+    case 'schedule_create':
+      return '新建日程'
+    case 'schedule_query':
+      return '查询日程'
+    case 'schedule_update':
+      return '更新日程'
+    case 'schedule_delete':
+      return '删除日程'
+    case 'clock_now':
+      return '核对时间'
+    default:
+      return '处理'
+  }
+}
+
 export default function ChatView({ activeId, title, onCreated, personaMissing = false }: Props): React.JSX.Element {
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
-  const [toolStatus, setToolStatus] = useState<{ name: string; result?: string } | null>(null)
+  const [toolName, setToolName] = useState<string | null>(null)
 
   const activeIdRef = useRef<string | null>(activeId)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -60,7 +83,7 @@ export default function ChatView({ activeId, title, onCreated, personaMissing = 
         createdAt: m.createdAt,
         toolName:
           m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0
-            ? m.toolCalls.map((t) => t.name).join('、')
+            ? m.toolCalls.map((t) => toolVerb(t.name)).join('、')
             : undefined
       }))
     setMessages(display)
@@ -74,7 +97,7 @@ export default function ChatView({ activeId, title, onCreated, personaMissing = 
     isSwitchingRef.current = true
     setStreaming(false)
     setStreamingText('')
-    setToolStatus(null)
+    setToolName(null)
     if (activeId) {
       void loadMessages(activeId)
     } else {
@@ -89,18 +112,16 @@ export default function ChatView({ activeId, title, onCreated, personaMissing = 
         setStreaming(true)
         setStreamingText((prev) => prev + (ev.content ?? ''))
       } else if (ev.type === 'toolCall') {
-        setToolStatus({ name: ev.toolName ?? '' })
-      } else if (ev.type === 'toolResult') {
-        setToolStatus({ name: ev.toolName ?? '', result: ev.toolResult })
+        setToolName(ev.toolName ?? '')
       } else if (ev.type === 'done') {
         setStreaming(false)
         setStreamingText('')
-        setToolStatus(null)
+        setToolName(null)
         if (activeIdRef.current) void loadMessages(activeIdRef.current)
       } else if (ev.type === 'error') {
         setStreaming(false)
         setStreamingText('')
-        setToolStatus(null)
+        setToolName(null)
         setMessages((prev) => [
           ...prev,
           { id: `err-${Date.now()}`, role: 'assistant', content: `出错了：${ev.error ?? '未知错误'}`, error: true, createdAt: Date.now() }
@@ -115,14 +136,14 @@ export default function ChatView({ activeId, title, onCreated, personaMissing = 
     const behavior: ScrollBehavior = isSwitchingRef.current ? 'auto' : 'smooth'
     isSwitchingRef.current = false
     bottomRef.current?.scrollIntoView({ behavior })
-  }, [messages, streamingText, toolStatus])
+  }, [messages, streamingText, toolName])
 
   const handleSend = async (): Promise<void> => {
     const text = input.trim()
     if (!text || streaming || personaMissing) return
     setInput('')
     setStreamingText('')
-    setToolStatus(null)
+    setToolName(null)
     setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: 'user', content: text, createdAt: Date.now() }])
     setStreaming(true)
 
@@ -168,7 +189,7 @@ export default function ChatView({ activeId, title, onCreated, personaMissing = 
                 {showDivider && <div className="time-divider">{formatDividerTime(m.createdAt)}</div>}
                 <div className={`msg ${m.role}`}>
                   {m.content ? <div className={`bubble${m.error ? ' error-bubble' : ''}`}>{m.content}</div> : null}
-                  {m.toolName && <div className="tool-note">已调用工具：{m.toolName}</div>}
+                  {m.toolName && <div className="tool-note">已{m.toolName}</div>}
                 </div>
               </Fragment>
             )
@@ -177,12 +198,7 @@ export default function ChatView({ activeId, title, onCreated, personaMissing = 
           {(streamingText || streaming) && (
             <div className="msg assistant">
               <div className="bubble">{streamingText || '思考中…'}</div>
-              {toolStatus && (
-                <div className="tool-note">
-                  {toolStatus.name}
-                  {toolStatus.result ? `：${toolStatus.result}` : '…'}
-                </div>
-              )}
+              {toolName && <div className="tool-status">{`正在${toolVerb(toolName)}…`}</div>}
             </div>
           )}
           <div ref={bottomRef} />
@@ -191,10 +207,20 @@ export default function ChatView({ activeId, title, onCreated, personaMissing = 
         <div className="chat-inputbar">
           <input
             className="input"
-            placeholder={personaMissing ? '该对话已失效' : '输入消息，例如：明天下午三点提醒我开会'}
+            placeholder={personaMissing ? '该对话已失效' : ''}
             value={input}
             disabled={personaMissing}
             onChange={(e) => setInput(e.target.value)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              const files = Array.from(e.dataTransfer.files)
+              if (files.length === 0) return
+              const path = window.agentApi.getPathForFile(files[0])
+              if (path) {
+                setInput((prev) => (prev ? `${prev} ${path}` : path))
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.nativeEvent.isComposing) void handleSend()
             }}

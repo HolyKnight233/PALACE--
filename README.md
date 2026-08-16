@@ -44,8 +44,8 @@ npm run build:win   # 类型检查 + 构建 + 打包
 
 产物在 `dist/` 目录：
 
-- `personal-agent-<version>-setup.exe` — NSIS 安装包
-- `personal-agent-<version>-portable.exe` — 免安装便携版
+- `palace-<version>-setup.exe` — NSIS 安装包
+- `palace-<version>-portable.exe` — 免安装便携版
 
 ## 使用
 
@@ -58,7 +58,7 @@ npm run build:win   # 类型检查 + 构建 + 打包
 内置 `electron-updater`，走 `generic`（静态服务器）提供方。启用步骤：
 
 1. 把 `electron-builder.yml` 里 `publish.url` 改成你托管更新包的地址（如 `https://updates.example.com/my-agent`）。
-2. 每次发布时，把 `dist/` 下的 `personal-agent-<version>-setup.exe`、`personal-agent-<version>-setup.exe.blockmap` 和 `latest.yml` 一并上传到该地址。
+2. 每次发布时，把 `dist/` 下的 `palace-<version>-setup.exe`、`palace-<version>-setup.exe.blockmap` 和 `latest.yml` 一并上传到该地址。
 3. 用户安装后应用会自动检查更新，下载完成后提示重启安装。
 
 ## 代码签名
@@ -74,6 +74,6 @@ npm run build:win
 
 ## 说明
 
-- 数据保存在系统用户目录（`%APPDATA%\Personal Agent`），为 JSON 文件，便于查看与备份。
+- 数据保存在系统用户目录（`%APPDATA%\PALACE`），为 JSON 文件，便于查看与备份。
 - 存储层抽象在 `src/main/db/store.ts`，如数据量变大可替换为 SQLite 而不影响上层。
 - 安全边界：渲染层 `contextIsolation` 开启、`nodeIntegration` 关闭，所有特权操作都在主进程完成。

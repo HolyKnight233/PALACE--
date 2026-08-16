@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Check } from 'lucide-react'
 import type { CalendarEvent } from '../../../shared/types'
 import ScheduleForm from './ScheduleForm'
 
@@ -25,6 +27,7 @@ export default function SchedulePanel(): React.JSX.Element {
   const [viewMonth, setViewMonth] = useState(new Date())
   const [monthEvents, setMonthEvents] = useState<CalendarEvent[]>([])
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; eventId: string } | null>(null)
 
   const reloadMonth = (): void => {
     const from = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1).getTime()
@@ -38,6 +41,21 @@ export default function SchedulePanel(): React.JSX.Element {
     return off
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMonth])
+
+  // 关闭右键菜单：点击外部 / Escape / 窗口缩放。
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = (): void => setCtxMenu(null)
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('resize', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('resize', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [ctxMenu])
 
   const changeMonth = (delta: number): void => {
     const m = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + delta, 1)
@@ -100,50 +118,48 @@ export default function SchedulePanel(): React.JSX.Element {
       </button>
 
       <div className="calendar-toggle" onClick={() => setCalendarOpen((v) => !v)}>
-        <span>
-          日历：{viewMonth.getFullYear()}年{viewMonth.getMonth() + 1}月
-        </span>
+        <span>日历</span>
         <span>{calendarOpen ? '▾' : '▸'}</span>
       </div>
 
       {calendarOpen && (
-      <div className="calendar">
-        <div className="calendar-header">
-          <button className="btn" onClick={() => changeMonth(-1)}>
-            ‹
-          </button>
-          <span className="calendar-title">
-            {viewMonth.getFullYear()}年{viewMonth.getMonth() + 1}月
-          </span>
-          <button className="btn" onClick={() => changeMonth(1)}>
-            ›
-          </button>
+        <div className="calendar">
+          <div className="calendar-header">
+            <button className="btn" onClick={() => changeMonth(-1)}>
+              ‹
+            </button>
+            <span className="calendar-title">
+              {viewMonth.getFullYear()}年{viewMonth.getMonth() + 1}月
+            </span>
+            <button className="btn" onClick={() => changeMonth(1)}>
+              ›
+            </button>
+          </div>
+          <div className="calendar-weekdays">
+            {WEEKDAYS.map((w) => (
+              <span key={w}>{w}</span>
+            ))}
+          </div>
+          <div className="calendar-grid">
+            {cells.map((day, i) =>
+              day === null ? (
+                <span key={`e${i}`} className="calendar-cell" />
+              ) : (
+                <button
+                  key={day}
+                  className={`calendar-cell${isSelected(day) ? ' selected' : ''}`}
+                  onClick={() => setSelected(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day))}
+                >
+                  <span className="calendar-day">{day}</span>
+                  {hasEvent(day) && <span className="calendar-dot" />}
+                </button>
+              )
+            )}
+          </div>
         </div>
-        <div className="calendar-weekdays">
-          {WEEKDAYS.map((w) => (
-            <span key={w}>{w}</span>
-          ))}
-        </div>
-        <div className="calendar-grid">
-          {cells.map((day, i) =>
-            day === null ? (
-              <span key={`e${i}`} className="calendar-cell empty" />
-            ) : (
-              <button
-                key={day}
-                className={`calendar-cell${isSelected(day) ? ' selected' : ''}`}
-                onClick={() => setSelected(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day))}
-              >
-                <span className="calendar-day">{day}</span>
-                {hasEvent(day) && <span className="calendar-dot" />}
-              </button>
-            )
-          )}
-        </div>
-      </div>
       )}
 
-      <div className="card">
+      <div className="card schedule-card">
         <div className="section-title">
           {selected.getMonth() + 1}月{selected.getDate()}日
         </div>
@@ -152,17 +168,61 @@ export default function SchedulePanel(): React.JSX.Element {
         ) : (
           <div className="event-list">
             {dayEvents.map((e) => (
-              <div key={e.id} className="event-item">
-                <div className="event-time">{fmtTime(e.startAt)}</div>
+              <div
+                key={e.id}
+                className={`event-item${e.completed ? ' completed' : ''}`}
+                onClick={() => setMode({ kind: 'edit', event: e })}
+                onContextMenu={(ev) => {
+                  ev.preventDefault()
+                  setCtxMenu({ x: ev.clientX, y: ev.clientY, eventId: e.id })
+                }}
+              >
+                <div className="event-time">
+                  {fmtTime(e.startAt)}
+                  {e.endAt ? ` – ${fmtTime(e.endAt)}` : ''}
+                </div>
                 <div className="event-title">{e.title}</div>
-                <button className="btn" onClick={() => setMode({ kind: 'edit', event: e })}>
-                  详情
+                <button
+                  className={`event-check${e.completed ? ' done' : ''}`}
+                  title={e.completed ? '标记为未完成' : '标记为已完成'}
+                  onClick={(ev) => {
+                    ev.stopPropagation()
+                    void window.agentApi.updateEvent(e.id, { completed: !e.completed })
+                  }}
+                >
+                  <Check size={14} />
                 </button>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {ctxMenu &&
+        createPortal(
+          <>
+            <div
+              className="ctx-overlay"
+              onClick={() => setCtxMenu(null)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setCtxMenu(null)
+              }}
+            />
+            <div className="ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
+              <button
+                className="ctx-item danger"
+                onClick={() => {
+                  void window.agentApi.deleteEvent(ctxMenu.eventId)
+                  setCtxMenu(null)
+                }}
+              >
+                删除
+              </button>
+            </div>
+          </>,
+          document.body
+        )}
     </div>
   )
 }

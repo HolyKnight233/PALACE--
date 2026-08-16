@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PomodoroPreset } from '../../../shared/types'
+import { Pause, Pencil, Pin, PinOff, Play, Plus, RotateCcw, RotateCw, Trash2 } from 'lucide-react'
+import type { PomodoroPreset, PomodoroState } from '../../../shared/types'
 import Dropdown from './Dropdown'
 
 function fmt(sec: number): string {
@@ -20,6 +21,7 @@ export default function PomodoroWindow(): React.JSX.Element {
   const [motto, setMotto] = useState<{ personaName: string; motto: string }>({ personaName: '', motto: '' })
   const [showMotto, setShowMotto] = useState(true)
   const [hasPersona, setHasPersona] = useState(false)
+  const [pinned, setPinned] = useState(false)
 
   const [name, setName] = useState('')
   const [workMinutes, setWorkMinutes] = useState('25')
@@ -27,26 +29,19 @@ export default function PomodoroWindow(): React.JSX.Element {
   const [loopCount, setLoopCount] = useState('4')
 
   const activeRef = useRef<PomodoroPreset | null>(null)
-  const phaseRef = useRef<'work' | 'break'>('work')
-  const cycleRef = useRef(0)
-  const remainingRef = useRef(0)
   const showMottoRef = useRef(true)
   const lastPersonaIdRef = useRef<string | null>(null)
-
-  const reset = (p: PomodoroPreset): void => {
-    activeRef.current = p
-    phaseRef.current = 'work'
-    cycleRef.current = 0
-    remainingRef.current = p.workMinutes * 60
-    setPhase('work')
-    setCycle(0)
-    setRemaining(p.workMinutes * 60)
-    setRunning(false)
-  }
+  const loadedRef = useRef(false)
 
   const refreshMotto = async (): Promise<void> => {
     if (!showMottoRef.current || !lastPersonaIdRef.current) return
     setMotto(await window.agentApi.generateMotto())
+  }
+
+  const togglePin = (): void => {
+    const next = !pinned
+    setPinned(next)
+    void window.agentApi.pomodoroWindow.setAlwaysOnTop(next)
   }
 
   const load = async (): Promise<void> => {
@@ -54,16 +49,20 @@ export default function PomodoroWindow(): React.JSX.Element {
     const act = await window.agentApi.getActivePomodoro()
     setPresets(ps)
     setActiveId(act.id)
-    reset(act)
+    activeRef.current = act
     const s = await window.agentApi.getSettings()
     const show = s.pomodoroShowMotto ?? true
     setShowMotto(show)
     showMottoRef.current = show
-    void window.agentApi.setPomodoroCompact(!show)
     const ctx = await window.agentApi.getPomodoroContext()
     document.documentElement.style.setProperty('--accent', ctx.color)
     lastPersonaIdRef.current = ctx.personaId
-    setHasPersona(ctx.personaId !== null)
+    const has = ctx.personaId !== null
+    setHasPersona(has)
+    loadedRef.current = true
+    // 没有选中对话（无角色）时不显示格言区域，窗口下方削去一部分。
+    void window.agentApi.setPomodoroCompact(!(show && has))
+    setPinned(await window.agentApi.pomodoroWindow.isAlwaysOnTop())
     if (ctx.personaId && showMottoRef.current) void refreshMotto()
   }
 
@@ -78,56 +77,38 @@ export default function PomodoroWindow(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 计时状态由主进程驱动：订阅状态推送，并在挂载时拉取一次初始状态。
   useEffect(() => {
-    if (!running) return
-    const t = setInterval(() => {
-      let r = remainingRef.current
-      if (r > 1) {
-        r -= 1
-        remainingRef.current = r
-        setRemaining(r)
-        return
-      }
-      const act = activeRef.current
-      if (!act) return
-      if (phaseRef.current === 'work') {
-        void window.agentApi.notify('番茄钟', '工作结束，开始休息')
-        phaseRef.current = 'break'
-        setPhase('break')
-        r = act.breakMinutes * 60
-      } else {
-        const next = cycleRef.current + 1
-        cycleRef.current = next
-        setCycle(next)
-        const done = act.loopCount !== 0 && next >= act.loopCount
-        if (done) {
-          void window.agentApi.notify('番茄钟', '全部循环完成')
-          setRunning(false)
-          setRemaining(0)
-          remainingRef.current = 0
-          return
-        }
-        void window.agentApi.notify('番茄钟', '休息结束，开始工作')
-        phaseRef.current = 'work'
-        setPhase('work')
-        r = act.workMinutes * 60
-      }
-      remainingRef.current = r
-      setRemaining(r)
-    }, 1000)
-    return () => clearInterval(t)
-  }, [running])
+    const apply = (st: PomodoroState): void => {
+      setRunning(st.running)
+      setPhase(st.phase)
+      setRemaining(st.remainingSeconds)
+      setCycle(st.cycle)
+    }
+    void window.agentApi.getPomodoroState().then(apply)
+    return window.agentApi.onPomodoroState(apply)
+  }, [])
 
-  const selectPreset = (id: string): void => {
-    void window.agentApi.setActivePomodoro(id)
+  // 当「显示格言」或「是否选中对话」变化时，同步窗口高度（有无格言区域）。
+  useEffect(() => {
+    if (!loadedRef.current) return
+    void window.agentApi.setPomodoroCompact(!(showMotto && hasPersona))
+  }, [showMotto, hasPersona])
+
+  const selectPreset = async (id: string): Promise<void> => {
+    await window.agentApi.setActivePomodoro(id)
+    await window.agentApi.pomodoroReset()
   }
 
-  const createPreset = (): void => {
-    void window.agentApi.createPomodoro()
+  const createPreset = async (): Promise<void> => {
+    await window.agentApi.createPomodoro()
+    await window.agentApi.pomodoroReset()
   }
 
-  const deletePreset = (): void => {
-    if (presets.length > 1) void window.agentApi.deletePomodoro(activeId)
+  const deletePreset = async (): Promise<void> => {
+    if (presets.length <= 1) return
+    await window.agentApi.deletePomodoro(activeId)
+    await window.agentApi.pomodoroReset()
   }
 
   const openEdit = (): void => {
@@ -153,11 +134,11 @@ export default function PomodoroWindow(): React.JSX.Element {
       })
     }
     setShowEdit(false)
+    await window.agentApi.pomodoroReset()
   }
 
   const handleReset = (): void => {
-    const a = activeRef.current
-    if (a) reset(a)
+    void window.agentApi.pomodoroReset()
   }
 
   useEffect(() => {
@@ -180,6 +161,13 @@ export default function PomodoroWindow(): React.JSX.Element {
         <span className="pomodoro-window-title">番茄钟</span>
         <div className="pomodoro-window-controls">
           <button
+            className={`pomodoro-win-btn${pinned ? ' pinned' : ''}`}
+            onClick={togglePin}
+            title={pinned ? '取消置顶' : '置顶'}
+          >
+            {pinned ? <Pin size={15} /> : <PinOff size={15} />}
+          </button>
+          <button
             className="pomodoro-win-btn"
             onClick={() => void window.agentApi.pomodoroWindow.minimize()}
             title="最小化"
@@ -197,16 +185,16 @@ export default function PomodoroWindow(): React.JSX.Element {
           <Dropdown
             value={activeId}
             options={presets.map((p) => ({ value: p.id, label: p.name }))}
-            onChange={selectPreset}
+            onChange={(id) => void selectPreset(id)}
           />
-          <button className="btn" onClick={createPreset}>
-            新建预设
+          <button className="pomodoro-preset-btn" onClick={() => void createPreset()} title="新建预设">
+            <Plus size={15} />
           </button>
-          <button className="btn" onClick={openEdit}>
-            编辑
+          <button className="pomodoro-preset-btn" onClick={openEdit} title="编辑">
+            <Pencil size={15} />
           </button>
-          <button className="btn btn-danger" disabled={presets.length <= 1} onClick={deletePreset}>
-            删除
+          <button className="pomodoro-preset-btn danger" disabled={presets.length <= 1} onClick={() => void deletePreset()} title="删除">
+            <Trash2 size={15} />
           </button>
         </div>
 
@@ -218,41 +206,29 @@ export default function PomodoroWindow(): React.JSX.Element {
 
         <div className="pomodoro-controls">
           <button className="pomodoro-icon-btn" onClick={handleReset} title="重置">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-              <path d="M3 3v5h5" />
-            </svg>
+            <RotateCcw size={20} />
           </button>
-          <button className="pomodoro-play-btn" onClick={() => setRunning((v) => !v)} title={running ? '暂停' : '开始'}>
+          <button className="pomodoro-play-btn" onClick={() => void window.agentApi.pomodoroToggle()} title={running ? '暂停' : '开始'}>
             {running ? (
-              <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
-                <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" />
-              </svg>
+              <Pause size={26} fill="currentColor" strokeWidth={0} />
             ) : (
-              <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <Play size={26} fill="currentColor" strokeWidth={0} />
             )}
           </button>
         </div>
 
-        {showMotto && (
+        {showMotto && hasPersona && (
           <div className="pomodoro-motto">
             <span className="pomodoro-motto-text">
-              {hasPersona && motto.motto
+              {motto.motto
                 ? motto.personaName
                   ? `${motto.personaName}：${motto.motto}`
                   : motto.motto
                 : ''}
             </span>
-            {hasPersona && (
-              <button className="pomodoro-motto-refresh" onClick={() => void refreshMotto()} title="换一句">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-2.6-6.3" />
-                  <path d="M21 3v5h-5" />
-                </svg>
-              </button>
-            )}
+            <button className="pomodoro-motto-refresh" onClick={() => void refreshMotto()} title="换一句">
+              <RotateCw size={14} />
+            </button>
           </div>
         )}
 
@@ -292,8 +268,9 @@ export default function PomodoroWindow(): React.JSX.Element {
           <>
             <div className="pomodoro-confirm-overlay" onClick={() => setShowConfirm(false)} />
             <div className="pomodoro-confirm">
-              <div className="hint">确定要关闭番茄钟吗？你可以在设置里重新打开。</div>
-              <div className="row-actions">
+              <div className="pomodoro-confirm-title">关闭番茄钟</div>
+              <div className="pomodoro-confirm-text">确定要关闭番茄钟吗？你可以在主窗口右下角点击番茄按钮重新打开。</div>
+              <div className="pomodoro-confirm-actions">
                 <button className="btn btn-primary" onClick={() => void window.agentApi.pomodoroWindow.close()}>
                   确定关闭
                 </button>
