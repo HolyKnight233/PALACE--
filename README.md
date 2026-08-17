@@ -4,6 +4,8 @@
 
 本项目主要使用DeepSeek-V4-Pro结合DeepSeek Harness完成，属于Vibe Coding项目，如有不完善之处请谅解。
 
+项目讲解视频：[点击这里](https://www.bilibili.com/video/BV1vpbi6NEzr)
+
 ## 功能
 
 - **自定义人设**：名字、角色、性格、说话风格、系统提示词、主题色，在「设置」页编辑。
