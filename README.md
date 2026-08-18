@@ -59,7 +59,7 @@ npm run build:win   # 类型检查 + 构建 + 打包
 
 ## 说明
 
-- 数据保存在系统用户目录（`%APPDATA%\PALACE`），为 JSON 文件，便于查看与备份。
+- 数据保存在系统用户目录（`%APPDATA%\PALACE`），为 JSON 文件，便于查看与备份。可以在设置页面更改自定义路径。
 - 存储层抽象在 `src/main/db/store.ts`，如数据量变大可替换为 SQLite 而不影响上层。
 - 安全边界：渲染层 `contextIsolation` 开启、`nodeIntegration` 关闭，所有特权操作都在主进程完成。
 
